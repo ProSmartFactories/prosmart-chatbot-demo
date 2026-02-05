@@ -11,8 +11,14 @@ interface ProcessPdfRequest {
   user_id: string;
 }
 
+interface ExtractedImage {
+  description: string;
+  context: string;
+  pageNumber: number;
+  type: string; // diagram, photo, chart, table, etc.
+}
+
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -55,16 +61,16 @@ serve(async (req) => {
       throw new Error(`Failed to download PDF: ${downloadError?.message}`);
     }
 
-    // 3. Convert PDF to base64 for GPT-4 Vision processing
+    // 3. Convert PDF to base64
     const arrayBuffer = await pdfData.arrayBuffer();
     const base64Pdf = btoa(
       new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
     );
 
-    // 4. Use GPT-4 to extract text content from PDF
-    console.log("Extracting text from PDF using GPT-4...");
+    // 4. Extract text and analyze images with GPT-4o
+    console.log("Analyzing PDF with GPT-4o...");
 
-    const extractionResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+    const analysisResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${openaiApiKey}`,
@@ -75,12 +81,30 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `Eres un experto en extracción de texto de documentos técnicos.
-Tu tarea es extraer TODO el texto del documento PDF proporcionado, preservando la estructura y organización.
-Responde SOLO con el texto extraído, sin comentarios adicionales.
-Mantén los títulos, subtítulos, listas y párrafos claramente separados.
-Si hay tablas, representa su contenido de forma legible.
-Indica entre corchetes [IMAGEN: descripción] cuando encuentres imágenes o diagramas relevantes.`
+            content: `Eres un experto en análisis de documentos técnicos. Tu tarea es:
+
+1. Extraer TODO el texto del documento, preservando la estructura (títulos, secciones, listas, tablas).
+2. Identificar TODAS las imágenes, diagramas, gráficos y figuras.
+3. Para cada imagen, proporcionar:
+   - Descripción detallada de lo que muestra
+   - Contexto técnico relacionado
+   - Número de página aproximado
+   - Tipo (diagrama, esquema, foto, gráfico, tabla, etc.)
+
+FORMATO DE RESPUESTA (JSON):
+{
+  "text_content": "Todo el texto extraído del documento...",
+  "images": [
+    {
+      "description": "Descripción detallada de la imagen",
+      "context": "Texto del documento relacionado con esta imagen",
+      "page_number": 1,
+      "type": "diagram"
+    }
+  ],
+  "total_pages": 10,
+  "document_summary": "Resumen breve del documento"
+}`
           },
           {
             role: "user",
@@ -94,45 +118,44 @@ Indica entre corchetes [IMAGEN: descripción] cuando encuentres imágenes o diag
               },
               {
                 type: "text",
-                text: "Extrae todo el texto de este documento PDF técnico, preservando la estructura. Indica las imágenes con [IMAGEN: descripción]."
+                text: "Analiza este documento PDF técnico. Extrae todo el texto y describe detalladamente cada imagen, diagrama o figura que encuentres. Responde en formato JSON."
               }
             ]
           }
         ],
         max_tokens: 16000,
+        response_format: { type: "json_object" }
       }),
     });
 
-    if (!extractionResponse.ok) {
-      const errorText = await extractionResponse.text();
-      console.error("OpenAI extraction error:", errorText);
-      throw new Error(`Failed to extract text from PDF: ${errorText}`);
+    if (!analysisResponse.ok) {
+      const errorText = await analysisResponse.text();
+      console.error("OpenAI analysis error:", errorText);
+      throw new Error(`Failed to analyze PDF: ${errorText}`);
     }
 
-    const extractionData = await extractionResponse.json();
-    const extractedText = extractionData.choices[0]?.message?.content || "";
+    const analysisData = await analysisResponse.json();
+    let analysis;
 
-    console.log(`Extracted ${extractedText.length} characters from PDF`);
-
-    // 5. Split text into semantic chunks
-    const chunks = splitIntoChunks(extractedText, 800, 100);
-    console.log(`Created ${chunks.length} text chunks`);
-
-    // 6. Extract image references from the text
-    const imageMatches = extractedText.matchAll(/\[IMAGEN: ([^\]]+)\]/g);
-    const imageDescriptions: { description: string; pageNumber: number }[] = [];
-    let pageNumber = 1;
-
-    for (const match of imageMatches) {
-      imageDescriptions.push({
-        description: match[1],
-        pageNumber: pageNumber++,
-      });
+    try {
+      analysis = JSON.parse(analysisData.choices[0]?.message?.content || "{}");
+    } catch {
+      // If JSON parsing fails, use a fallback structure
+      analysis = {
+        text_content: analysisData.choices[0]?.message?.content || "",
+        images: [],
+        total_pages: 1,
+        document_summary: ""
+      };
     }
 
-    // 7. Delete existing chunks and images for this user
+    const extractedText = analysis.text_content || "";
+    const extractedImages: ExtractedImage[] = analysis.images || [];
+
+    console.log(`Extracted ${extractedText.length} characters and ${extractedImages.length} images`);
+
+    // 5. Delete existing data for this user
     console.log("Deleting previous data...");
-
     await supabase.from("document_chunks").delete().eq("user_id", user_id);
     await supabase.from("document_images").delete().eq("user_id", user_id);
 
@@ -146,15 +169,18 @@ Indica entre corchetes [IMAGEN: descripción] cuando encuentres imágenes o diag
       await supabase.storage.from("document-images").remove(filesToDelete);
     }
 
-    // 8. Generate embeddings for chunks
-    console.log("Generating embeddings for chunks...");
+    // 6. Split text into semantic chunks
+    const chunks = splitIntoChunks(extractedText, 800, 100);
+    console.log(`Created ${chunks.length} text chunks`);
 
-    const chunkEmbeddings = await generateEmbeddings(
+    // 7. Generate embeddings for chunks in batches
+    console.log("Generating embeddings for chunks...");
+    const chunkEmbeddings = await generateEmbeddingsBatched(
       chunks.map(c => c.content),
       openaiApiKey
     );
 
-    // 9. Insert chunks with embeddings
+    // 8. Insert chunks with embeddings
     const chunksToInsert = chunks.map((chunk, index) => ({
       user_id,
       document_id,
@@ -171,21 +197,25 @@ Indica entre corchetes [IMAGEN: descripción] cuando encuentres imágenes o diag
       throw new Error(`Failed to insert chunks: ${chunksError.message}`);
     }
 
-    // 10. Process and insert image references
+    // 9. Process images with detailed context
     let imagesInserted = 0;
 
-    if (imageDescriptions.length > 0) {
-      console.log(`Processing ${imageDescriptions.length} image references...`);
+    if (extractedImages.length > 0) {
+      console.log(`Processing ${extractedImages.length} images...`);
 
-      const imageContexts = imageDescriptions.map(img => img.description);
-      const imageEmbeddings = await generateEmbeddings(imageContexts, openaiApiKey);
+      // Create rich context for each image (description + surrounding text)
+      const imageContexts = extractedImages.map(img =>
+        `${img.type}: ${img.description}. Contexto: ${img.context}`
+      );
 
-      const imagesToInsert = imageDescriptions.map((img, index) => ({
+      const imageEmbeddings = await generateEmbeddingsBatched(imageContexts, openaiApiKey);
+
+      const imagesToInsert = extractedImages.map((img, index) => ({
         user_id,
         document_id,
-        page_number: img.pageNumber,
-        image_url: `placeholder_${index + 1}`, // Placeholder URL
-        context: img.description,
+        page_number: img.pageNumber || 1,
+        image_url: `doc_image_p${img.pageNumber}_${index + 1}`,
+        context: `[${img.type?.toUpperCase() || 'IMAGEN'}] ${img.description}${img.context ? `\n\nContexto relacionado: ${img.context}` : ''}`,
         embedding: imageEmbeddings[index],
       }));
 
@@ -200,7 +230,7 @@ Indica entre corchetes [IMAGEN: descripción] cuando encuentres imágenes o diag
       }
     }
 
-    // 11. Mark document as processed
+    // 10. Mark document as processed
     await supabase
       .from("documents")
       .update({ processed: true })
@@ -214,6 +244,8 @@ Indica entre corchetes [IMAGEN: descripción] cuando encuentres imágenes o diag
         message: "PDF processed successfully",
         chunks_count: chunks.length,
         images_count: imagesInserted,
+        total_pages: analysis.total_pages || 1,
+        summary: analysis.document_summary || null,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -223,14 +255,14 @@ Indica entre corchetes [IMAGEN: descripción] cuando encuentres imágenes o diag
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message || "Unknown error occurred"
+        error: (error as Error).message || "Unknown error occurred"
       }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
 
-// Helper: Split text into chunks with overlap
+// Helper: Split text into semantic chunks with page tracking
 function splitIntoChunks(
   text: string,
   chunkSize: number,
@@ -243,15 +275,25 @@ function splitIntoChunks(
   let currentPage = 1;
 
   for (const paragraph of paragraphs) {
-    // Detect page breaks
-    if (paragraph.toLowerCase().includes("página") || paragraph.match(/^-{3,}$/)) {
-      currentPage++;
+    // Detect page breaks (common patterns)
+    if (
+      paragraph.toLowerCase().includes("página") ||
+      paragraph.match(/^-{3,}$/) ||
+      paragraph.match(/^page\s+\d+/i) ||
+      paragraph.match(/^\d+\s*$/)
+    ) {
+      const pageMatch = paragraph.match(/\d+/);
+      if (pageMatch) {
+        currentPage = parseInt(pageMatch[0], 10);
+      } else {
+        currentPage++;
+      }
     }
 
     if (currentChunk.length + paragraph.length > chunkSize && currentChunk.length > 0) {
       chunks.push({ content: currentChunk.trim(), pageNumber: currentPage });
 
-      // Keep overlap
+      // Keep overlap for context continuity
       const words = currentChunk.split(" ");
       const overlapWords = words.slice(-Math.floor(overlap / 5));
       currentChunk = overlapWords.join(" ") + " " + paragraph;
@@ -267,25 +309,38 @@ function splitIntoChunks(
   return chunks;
 }
 
-// Helper: Generate embeddings using OpenAI
-async function generateEmbeddings(texts: string[], apiKey: string): Promise<number[][]> {
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "text-embedding-3-small",
-      input: texts,
-    }),
-  });
+// Helper: Generate embeddings in batches to avoid API limits
+async function generateEmbeddingsBatched(
+  texts: string[],
+  apiKey: string,
+  batchSize: number = 20
+): Promise<number[][]> {
+  const allEmbeddings: number[][] = [];
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to generate embeddings: ${error}`);
+  for (let i = 0; i < texts.length; i += batchSize) {
+    const batch = texts.slice(i, i + batchSize);
+
+    const response = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "text-embedding-3-small",
+        input: batch,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to generate embeddings: ${error}`);
+    }
+
+    const data = await response.json();
+    const embeddings = data.data.map((item: { embedding: number[] }) => item.embedding);
+    allEmbeddings.push(...embeddings);
   }
 
-  const data = await response.json();
-  return data.data.map((item: { embedding: number[] }) => item.embedding);
+  return allEmbeddings;
 }
