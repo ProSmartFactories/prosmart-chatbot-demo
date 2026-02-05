@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { IPhoneFrame } from '@/components/iphone/IPhoneFrame';
 import { ChatHeader } from '@/components/whatsapp/ChatHeader';
 import { ChatMessage } from '@/components/whatsapp/ChatMessage';
@@ -8,16 +9,8 @@ import { ChatInput } from '@/components/whatsapp/ChatInput';
 import { SuggestedChips } from '@/components/whatsapp/SuggestedChips';
 import { PDFUploader } from '@/components/pdf/PDFUploader';
 import { supabase, ChatMessage as ChatMessageType } from '@/lib/supabase';
-
-// Demo user ID (in production, this would come from authentication)
-const DEMO_USER_ID = 'demo-user-' + Math.random().toString(36).substring(7);
-
-const INITIAL_MESSAGE: ChatMessageType = {
-  id: '1',
-  type: 'bot',
-  content: 'Hola, soy tu Asistente Técnico de ProSmart Factories.\n\nPara comenzar, sube un documento PDF técnico usando el botón de adjuntar (clip). Una vez procesado, podré responder tus preguntas basándome únicamente en el contenido del documento.',
-  timestamp: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
-};
+import { useAuth } from '@/lib/auth';
+import { LogOut } from 'lucide-react';
 
 const SUGGESTIONS = [
   'Explícame este parámetro',
@@ -26,12 +19,34 @@ const SUGGESTIONS = [
 ];
 
 export default function Home() {
-  const [messages, setMessages] = useState<ChatMessageType[]>([INITIAL_MESSAGE]);
+  const { user, profile, loading, signOut } = useAuth();
+  const router = useRouter();
+  const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [showUploader, setShowUploader] = useState(false);
   const [hasDocument, setHasDocument] = useState(false);
-  const [userId] = useState(DEMO_USER_ID);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [user, loading, router]);
+
+  // Set initial message when user is loaded
+  useEffect(() => {
+    if (user && profile) {
+      const greeting = `Hola ${profile.name.split(' ')[0]}, soy tu Asistente Técnico de ProSmart Factories.\n\nPara comenzar, sube un documento PDF técnico usando el botón de adjuntar (clip). Una vez procesado, podré responder tus preguntas basándome únicamente en el contenido del documento.`;
+
+      setMessages([{
+        id: '1',
+        type: 'bot',
+        content: greeting,
+        timestamp: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+      }]);
+    }
+  }, [user, profile]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -40,11 +55,13 @@ export default function Home() {
 
   // Check if user has a document
   useEffect(() => {
+    if (!user) return;
+
     const checkDocument = async () => {
       const { data } = await supabase
         .from('documents')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', user.id)
         .eq('processed', true)
         .single();
 
@@ -54,10 +71,10 @@ export default function Home() {
     };
 
     checkDocument();
-  }, [userId]);
+  }, [user]);
 
   const handleSendMessage = useCallback(async (text: string) => {
-    if (!text.trim()) return;
+    if (!text.trim() || !user) return;
 
     // Add user message
     const userMessage: ChatMessageType = {
@@ -75,7 +92,7 @@ export default function Home() {
       const { data, error } = await supabase.functions.invoke('chat', {
         body: {
           message: text,
-          user_id: userId,
+          user_id: user.id,
         },
       });
 
@@ -109,7 +126,7 @@ export default function Home() {
     } finally {
       setIsTyping(false);
     }
-  }, [userId, hasDocument]);
+  }, [user, hasDocument]);
 
   const handleUploadComplete = useCallback(() => {
     setHasDocument(true);
@@ -126,9 +143,22 @@ export default function Home() {
   }, []);
 
   const handleStatusUpdate = useCallback((status: string) => {
-    // Could update UI with processing status
     console.log('Upload status:', status);
   }, []);
+
+  const handleLogout = async () => {
+    await signOut();
+    router.push('/login');
+  };
+
+  // Show loading while checking auth
+  if (loading || !user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4 md:p-8">
@@ -138,12 +168,27 @@ export default function Home() {
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl" />
       </div>
 
-      {/* Logo and title */}
+      {/* Header with logo and user info */}
       <div className="absolute top-8 left-8 z-10">
         <h1 className="text-white text-2xl font-bold tracking-tight">
           ProSmart<span className="text-emerald-400">.</span>
         </h1>
-        <p className="text-slate-400 text-sm mt-1">Technical Assistant Demo</p>
+        <p className="text-slate-400 text-sm mt-1">Technical Assistant</p>
+      </div>
+
+      {/* User info and logout */}
+      <div className="absolute top-8 right-8 z-10 flex items-center gap-4">
+        <div className="text-right">
+          <p className="text-white font-medium">{profile?.name}</p>
+          <p className="text-slate-400 text-sm">{profile?.company}</p>
+        </div>
+        <button
+          onClick={handleLogout}
+          className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+          title="Cerrar sesión"
+        >
+          <LogOut className="w-5 h-5" />
+        </button>
       </div>
 
       {/* iPhone with WhatsApp */}
@@ -158,7 +203,7 @@ export default function Home() {
           />
 
           {/* Header */}
-          <ChatHeader />
+          <ChatHeader userName={profile?.name || 'Usuario'} />
 
           {/* Messages area */}
           <div className="flex-1 overflow-y-auto py-2 relative z-10">
@@ -202,7 +247,7 @@ export default function Home() {
 
           {/* PDF Uploader Modal */}
           <PDFUploader
-            userId={userId}
+            userId={user.id}
             isOpen={showUploader}
             onClose={() => setShowUploader(false)}
             onUploadComplete={handleUploadComplete}
