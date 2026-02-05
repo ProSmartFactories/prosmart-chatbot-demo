@@ -37,7 +37,7 @@ export default function Home() {
   // Set initial message when user is loaded
   useEffect(() => {
     if (user && profile) {
-      const greeting = `Hola ${profile.name.split(' ')[0]}, soy tu Asistente Técnico de ProSmart Factories.\n\nPara comenzar, sube un documento PDF técnico usando el botón de adjuntar (clip). Una vez procesado, podré responder tus preguntas basándome únicamente en el contenido del documento.`;
+      const greeting = `Hola ${profile.name.split(' ')[0]}, soy tu Encargado Digital de Pro Smart Factories.\n\nPara comenzar, sube un documento PDF técnico usando el botón de adjuntar (clip). Una vez procesado, podré responder tus preguntas basándome únicamente en el contenido del documento.`;
 
       setMessages([{
         id: '1',
@@ -155,7 +155,7 @@ export default function Home() {
   if (loading || !user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -164,16 +164,19 @@ export default function Home() {
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4 md:p-8">
       {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl" />
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-orange-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-orange-600/10 rounded-full blur-3xl" />
       </div>
 
-      {/* Header with logo and user info */}
-      <div className="absolute top-8 left-8 z-10">
-        <h1 className="text-white text-2xl font-bold tracking-tight">
-          ProSmart<span className="text-emerald-400">.</span>
-        </h1>
-        <p className="text-slate-400 text-sm mt-1">Technical Assistant</p>
+      {/* Header with logo and branding */}
+      <div className="absolute top-8 left-8 z-10 flex items-center gap-3">
+        <img src="/logo-psf.png" alt="Pro Smart Factories" className="w-12 h-12 object-contain" />
+        <div>
+          <h1 className="text-white text-2xl font-bold tracking-tight">
+            Pro Smart Factories
+          </h1>
+          <p className="text-orange-400 text-sm mt-1 font-medium">Encargado Digital</p>
+        </div>
       </div>
 
       {/* User info and logout */}
@@ -203,7 +206,7 @@ export default function Home() {
           />
 
           {/* Header */}
-          <ChatHeader userName={profile?.name || 'Usuario'} />
+          <ChatHeader />
 
           {/* Messages area */}
           <div className="flex-1 overflow-y-auto py-2 relative z-10">
@@ -262,15 +265,15 @@ export default function Home() {
           <h2 className="text-white font-semibold text-lg mb-4">Cómo usar</h2>
           <ol className="space-y-3 text-slate-300 text-sm">
             <li className="flex gap-3">
-              <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold flex-shrink-0">1</span>
+              <span className="w-6 h-6 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center text-xs font-bold flex-shrink-0">1</span>
               <span>Sube un documento PDF técnico usando el botón de clip</span>
             </li>
             <li className="flex gap-3">
-              <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold flex-shrink-0">2</span>
+              <span className="w-6 h-6 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center text-xs font-bold flex-shrink-0">2</span>
               <span>Espera a que se procese el documento</span>
             </li>
             <li className="flex gap-3">
-              <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold flex-shrink-0">3</span>
+              <span className="w-6 h-6 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center text-xs font-bold flex-shrink-0">3</span>
               <span>Haz preguntas sobre el contenido y recibe respuestas precisas</span>
             </li>
           </ol>

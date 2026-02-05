@@ -62,12 +62,12 @@ export function IPhoneFrame({ children }: IPhoneFrameProps) {
             <div className="absolute top-0 left-0 right-0 h-[54px] z-10 flex items-end justify-between px-8 pb-1">
               <span className="text-white text-[14px] font-semibold">9:41</span>
               <div className="flex items-center gap-1">
-                {/* Signal bars */}
-                <div className="flex gap-[2px]">
-                  <div className="w-[4px] h-[4px] bg-white rounded-sm" />
-                  <div className="w-[4px] h-[6px] bg-white rounded-sm" />
-                  <div className="w-[4px] h-[8px] bg-white rounded-sm" />
-                  <div className="w-[4px] h-[10px] bg-white rounded-sm" />
+                {/* Signal bars - smallest left, largest right */}
+                <div className="flex items-end gap-[2px]">
+                  <div className="w-[3px] h-[4px] bg-white rounded-sm" />
+                  <div className="w-[3px] h-[6px] bg-white rounded-sm" />
+                  <div className="w-[3px] h-[8px] bg-white rounded-sm" />
+                  <div className="w-[3px] h-[10px] bg-white rounded-sm" />
                 </div>
                 {/* WiFi */}
                 <svg className="w-[15px] h-[11px] text-white ml-1" fill="currentColor" viewBox="0 0 16 12">

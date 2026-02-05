@@ -41,7 +41,7 @@ export default function LoginPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -50,8 +50,8 @@ export default function LoginPage() {
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
       {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl" />
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-orange-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-orange-600/10 rounded-full blur-3xl" />
       </div>
 
       <motion.div
@@ -60,11 +60,12 @@ export default function LoginPage() {
         className="w-full max-w-md"
       >
         {/* Logo */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 flex flex-col items-center">
+          <img src="/logo-psf.png" alt="Pro Smart Factories" className="w-16 h-16 object-contain mb-4" />
           <h1 className="text-white text-3xl font-bold tracking-tight">
-            ProSmart<span className="text-emerald-400">.</span>
+            Pro Smart Factories
           </h1>
-          <p className="text-slate-400 mt-2">Technical Assistant</p>
+          <p className="text-orange-400 mt-2 font-medium">Encargado Digital</p>
         </div>
 
         {/* Card */}
@@ -117,7 +118,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-slate-500 text-sm mt-6">
-          Asistente técnico basado en IA para documentación
+          Encargado Digital basado en IA para documentación técnica
         </p>
       </motion.div>
     </main>
