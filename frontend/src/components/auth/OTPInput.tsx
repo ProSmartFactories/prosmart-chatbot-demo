@@ -98,7 +98,7 @@ export function OTPInput({ email, onSuccess, onBack }: OTPInputProps) {
           animate={{ scale: 1 }}
           className="flex justify-center"
         >
-          <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center">
+          <div className="w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center">
             <CheckCircle className="w-10 h-10 text-white" />
           </div>
         </motion.div>
@@ -116,14 +116,14 @@ export function OTPInput({ email, onSuccess, onBack }: OTPInputProps) {
                 onChange={(e) => handleChange(index, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(index, e)}
                 disabled={loading}
-                className="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all disabled:opacity-50"
+                className="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 rounded-xl text-gray-900 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all disabled:opacity-50"
               />
             ))}
           </div>
 
           {loading && (
             <div className="flex justify-center">
-              <Loader2 className="w-6 h-6 animate-spin text-emerald-500" />
+              <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
             </div>
           )}
 
@@ -140,7 +140,7 @@ export function OTPInput({ email, onSuccess, onBack }: OTPInputProps) {
           <div className="flex flex-col gap-2 text-center">
             <button
               onClick={handleResend}
-              className="text-emerald-600 text-sm hover:underline"
+              className="text-orange-600 text-sm hover:underline"
             >
               Reenviar código
             </button>

@@ -15,7 +15,7 @@ interface ExtractedImage {
   description: string;
   context: string;
   pageNumber: number;
-  type: string; // diagram, photo, chart, table, etc.
+  type: string;
 }
 
 serve(async (req) => {
@@ -61,126 +61,223 @@ serve(async (req) => {
       throw new Error(`Failed to download PDF: ${downloadError?.message}`);
     }
 
-    // 3. Convert PDF to base64
     const arrayBuffer = await pdfData.arrayBuffer();
-    const base64Pdf = btoa(
-      new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
-    );
+    console.log(`PDF size: ${Math.round(arrayBuffer.byteLength / 1024)} KB`);
 
-    // 4. Extract text and analyze images with GPT-4o
-    console.log("Analyzing PDF with GPT-4o...");
+    // 3. Upload file to OpenAI for processing
+    console.log("Uploading PDF to OpenAI...");
 
-    const analysisResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+    const formData = new FormData();
+    formData.append("file", new Blob([arrayBuffer], { type: "application/pdf" }), "document.pdf");
+    formData.append("purpose", "assistants");
+
+    const uploadResponse = await fetch("https://api.openai.com/v1/files", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${openaiApiKey}`,
+      },
+      body: formData,
+    });
+
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      console.error("File upload error:", errorText);
+      throw new Error(`Failed to upload file: ${errorText}`);
+    }
+
+    const uploadedFile = await uploadResponse.json();
+    console.log(`File uploaded: ${uploadedFile.id}`);
+
+    // 4. Create an assistant for PDF analysis
+    const assistantResponse = await fetch("https://api.openai.com/v1/assistants", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${openaiApiKey}`,
         "Content-Type": "application/json",
+        "OpenAI-Beta": "assistants=v2",
       },
       body: JSON.stringify({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content: `Eres un experto en análisis de documentos técnicos. Tu tarea es:
+        name: "PDF Analyzer",
+        instructions: `Eres un experto en análisis de documentos técnicos. Extrae TODO el contenido del documento.
 
-1. Extraer TODO el texto del documento, preservando la estructura (títulos, secciones, listas, tablas).
-2. Identificar TODAS las imágenes, diagramas, gráficos y figuras.
-3. Para cada imagen, proporcionar:
-   - Descripción detallada de lo que muestra
-   - Contexto técnico relacionado
-   - Número de página aproximado
-   - Tipo (diagrama, esquema, foto, gráfico, tabla, etc.)
-
-FORMATO DE RESPUESTA (JSON):
+RESPONDE ÚNICAMENTE con JSON válido (sin markdown, sin texto extra):
 {
-  "text_content": "Todo el texto extraído del documento...",
-  "images": [
-    {
-      "description": "Descripción detallada de la imagen",
-      "context": "Texto del documento relacionado con esta imagen",
-      "page_number": 1,
-      "type": "diagram"
-    }
-  ],
+  "text_content": "Todo el texto extraído...",
+  "images": [{"description": "...", "context": "...", "page_number": 1, "type": "diagram"}],
   "total_pages": 10,
-  "document_summary": "Resumen breve del documento"
-}`
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "file",
-                file: {
-                  filename: "document.pdf",
-                  file_data: `data:application/pdf;base64,${base64Pdf}`
-                }
-              },
-              {
-                type: "text",
-                text: "Analiza este documento PDF técnico. Extrae todo el texto y describe detalladamente cada imagen, diagrama o figura que encuentres. Responde en formato JSON."
-              }
-            ]
-          }
-        ],
-        max_tokens: 16000,
-        response_format: { type: "json_object" }
+  "document_summary": "Resumen breve"
+}`,
+        model: "gpt-4o",
+        tools: [{ type: "file_search" }],
       }),
     });
 
-    if (!analysisResponse.ok) {
-      const errorText = await analysisResponse.text();
-      console.error("OpenAI analysis error:", errorText);
-      throw new Error(`Failed to analyze PDF: ${errorText}`);
+    if (!assistantResponse.ok) {
+      const errorText = await assistantResponse.text();
+      throw new Error(`Failed to create assistant: ${errorText}`);
     }
 
-    const analysisData = await analysisResponse.json();
-    let analysis;
+    const assistant = await assistantResponse.json();
+    console.log(`Assistant created: ${assistant.id}`);
 
+    // 5. Create a thread with the file
+    const threadResponse = await fetch("https://api.openai.com/v1/threads", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${openaiApiKey}`,
+        "Content-Type": "application/json",
+        "OpenAI-Beta": "assistants=v2",
+      },
+      body: JSON.stringify({
+        messages: [
+          {
+            role: "user",
+            content: "Analiza este documento PDF. Extrae todo el texto y describe cada imagen/diagrama/figura. Responde SOLO con JSON válido.",
+            attachments: [
+              {
+                file_id: uploadedFile.id,
+                tools: [{ type: "file_search" }],
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!threadResponse.ok) {
+      const errorText = await threadResponse.text();
+      throw new Error(`Failed to create thread: ${errorText}`);
+    }
+
+    const thread = await threadResponse.json();
+    console.log(`Thread created: ${thread.id}`);
+
+    // 6. Run the assistant
+    const runResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/runs`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${openaiApiKey}`,
+        "Content-Type": "application/json",
+        "OpenAI-Beta": "assistants=v2",
+      },
+      body: JSON.stringify({
+        assistant_id: assistant.id,
+      }),
+    });
+
+    if (!runResponse.ok) {
+      const errorText = await runResponse.text();
+      throw new Error(`Failed to run assistant: ${errorText}`);
+    }
+
+    const run = await runResponse.json();
+    console.log(`Run started: ${run.id}`);
+
+    // 7. Poll for completion (max 5 minutes)
+    let runStatus = run.status;
+    let attempts = 0;
+    const maxAttempts = 60;
+
+    while (runStatus !== "completed" && runStatus !== "failed" && attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      const statusResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/runs/${run.id}`, {
+        headers: {
+          "Authorization": `Bearer ${openaiApiKey}`,
+          "OpenAI-Beta": "assistants=v2",
+        },
+      });
+
+      const statusData = await statusResponse.json();
+      runStatus = statusData.status;
+      attempts++;
+      console.log(`Run status: ${runStatus} (attempt ${attempts})`);
+    }
+
+    if (runStatus !== "completed") {
+      throw new Error(`Assistant run failed or timed out. Status: ${runStatus}`);
+    }
+
+    // 8. Get the messages
+    const messagesResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/messages`, {
+      headers: {
+        "Authorization": `Bearer ${openaiApiKey}`,
+        "OpenAI-Beta": "assistants=v2",
+      },
+    });
+
+    const messagesData = await messagesResponse.json();
+    const assistantMessage = messagesData.data.find((m: { role: string }) => m.role === "assistant");
+
+    if (!assistantMessage) {
+      throw new Error("No response from assistant");
+    }
+
+    let responseText = "";
+    for (const content of assistantMessage.content) {
+      if (content.type === "text") {
+        responseText += content.text.value;
+      }
+    }
+
+    console.log("Response received, parsing JSON...");
+
+    // 9. Parse the JSON response
+    let analysis;
     try {
-      analysis = JSON.parse(analysisData.choices[0]?.message?.content || "{}");
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        analysis = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error("No JSON found");
+      }
     } catch {
-      // If JSON parsing fails, use a fallback structure
+      console.log("JSON parse failed, using raw text");
       analysis = {
-        text_content: analysisData.choices[0]?.message?.content || "",
+        text_content: responseText,
         images: [],
         total_pages: 1,
-        document_summary: ""
+        document_summary: "Documento procesado"
       };
     }
 
-    const extractedText = analysis.text_content || "";
+    const extractedText = analysis.text_content || responseText || "";
     const extractedImages: ExtractedImage[] = analysis.images || [];
 
-    console.log(`Extracted ${extractedText.length} characters and ${extractedImages.length} images`);
+    console.log(`Extracted ${extractedText.length} chars, ${extractedImages.length} images`);
 
-    // 5. Delete existing data for this user
+    // 10. Cleanup OpenAI resources
+    await fetch(`https://api.openai.com/v1/assistants/${assistant.id}`, {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${openaiApiKey}`, "OpenAI-Beta": "assistants=v2" },
+    }).catch(() => {});
+
+    await fetch(`https://api.openai.com/v1/files/${uploadedFile.id}`, {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${openaiApiKey}` },
+    }).catch(() => {});
+
+    // 11. Delete existing data for this user
     console.log("Deleting previous data...");
     await supabase.from("document_chunks").delete().eq("user_id", user_id);
     await supabase.from("document_images").delete().eq("user_id", user_id);
 
-    // Delete previous images from storage
-    const { data: existingImages } = await supabase.storage
-      .from("document-images")
-      .list(user_id);
+    // 12. Split text into chunks
+    const chunks = splitIntoChunks(extractedText, 800, 100);
+    console.log(`Created ${chunks.length} chunks`);
 
-    if (existingImages && existingImages.length > 0) {
-      const filesToDelete = existingImages.map(f => `${user_id}/${f.name}`);
-      await supabase.storage.from("document-images").remove(filesToDelete);
+    if (chunks.length === 0) {
+      throw new Error("No text content extracted from PDF");
     }
 
-    // 6. Split text into semantic chunks
-    const chunks = splitIntoChunks(extractedText, 800, 100);
-    console.log(`Created ${chunks.length} text chunks`);
-
-    // 7. Generate embeddings for chunks in batches
-    console.log("Generating embeddings for chunks...");
+    // 13. Generate embeddings
+    console.log("Generating embeddings...");
     const chunkEmbeddings = await generateEmbeddingsBatched(
       chunks.map(c => c.content),
       openaiApiKey
     );
 
-    // 8. Insert chunks with embeddings
+    // 14. Insert chunks
     const chunksToInsert = chunks.map((chunk, index) => ({
       user_id,
       document_id,
@@ -197,15 +294,14 @@ FORMATO DE RESPUESTA (JSON):
       throw new Error(`Failed to insert chunks: ${chunksError.message}`);
     }
 
-    // 9. Process images with detailed context
+    // 15. Process images
     let imagesInserted = 0;
 
     if (extractedImages.length > 0) {
       console.log(`Processing ${extractedImages.length} images...`);
 
-      // Create rich context for each image (description + surrounding text)
       const imageContexts = extractedImages.map(img =>
-        `${img.type}: ${img.description}. Contexto: ${img.context}`
+        `${img.type || 'imagen'}: ${img.description || ''}. ${img.context || ''}`
       );
 
       const imageEmbeddings = await generateEmbeddingsBatched(imageContexts, openaiApiKey);
@@ -214,8 +310,8 @@ FORMATO DE RESPUESTA (JSON):
         user_id,
         document_id,
         page_number: img.pageNumber || 1,
-        image_url: `doc_image_p${img.pageNumber}_${index + 1}`,
-        context: `[${img.type?.toUpperCase() || 'IMAGEN'}] ${img.description}${img.context ? `\n\nContexto relacionado: ${img.context}` : ''}`,
+        image_url: `doc_image_p${img.pageNumber || 1}_${index + 1}`,
+        context: `[${(img.type || 'IMAGEN').toUpperCase()}] ${img.description || ''}${img.context ? `\n\nContexto: ${img.context}` : ''}`,
         embedding: imageEmbeddings[index],
       }));
 
@@ -223,14 +319,12 @@ FORMATO DE RESPUESTA (JSON):
         .from("document_images")
         .insert(imagesToInsert);
 
-      if (imagesError) {
-        console.error("Failed to insert images:", imagesError);
-      } else {
+      if (!imagesError) {
         imagesInserted = imagesToInsert.length;
       }
     }
 
-    // 10. Mark document as processed
+    // 16. Mark document as processed
     await supabase
       .from("documents")
       .update({ processed: true })
@@ -262,41 +356,26 @@ FORMATO DE RESPUESTA (JSON):
   }
 });
 
-// Helper: Split text into semantic chunks with page tracking
-function splitIntoChunks(
-  text: string,
-  chunkSize: number,
-  overlap: number
-): { content: string; pageNumber: number }[] {
+function splitIntoChunks(text: string, chunkSize: number, overlap: number): { content: string; pageNumber: number }[] {
+  if (!text?.trim()) return [];
+
   const chunks: { content: string; pageNumber: number }[] = [];
   const paragraphs = text.split(/\n\n+/);
-
   let currentChunk = "";
   let currentPage = 1;
 
   for (const paragraph of paragraphs) {
-    // Detect page breaks (common patterns)
-    if (
-      paragraph.toLowerCase().includes("página") ||
-      paragraph.match(/^-{3,}$/) ||
-      paragraph.match(/^page\s+\d+/i) ||
-      paragraph.match(/^\d+\s*$/)
-    ) {
+    if (!paragraph.trim()) continue;
+
+    if (paragraph.match(/página|page\s*\d+/i)) {
       const pageMatch = paragraph.match(/\d+/);
-      if (pageMatch) {
-        currentPage = parseInt(pageMatch[0], 10);
-      } else {
-        currentPage++;
-      }
+      if (pageMatch) currentPage = parseInt(pageMatch[0], 10);
     }
 
     if (currentChunk.length + paragraph.length > chunkSize && currentChunk.length > 0) {
       chunks.push({ content: currentChunk.trim(), pageNumber: currentPage });
-
-      // Keep overlap for context continuity
       const words = currentChunk.split(" ");
-      const overlapWords = words.slice(-Math.floor(overlap / 5));
-      currentChunk = overlapWords.join(" ") + " " + paragraph;
+      currentChunk = words.slice(-Math.floor(overlap / 5)).join(" ") + " " + paragraph;
     } else {
       currentChunk += (currentChunk ? "\n\n" : "") + paragraph;
     }
@@ -309,16 +388,13 @@ function splitIntoChunks(
   return chunks;
 }
 
-// Helper: Generate embeddings in batches to avoid API limits
-async function generateEmbeddingsBatched(
-  texts: string[],
-  apiKey: string,
-  batchSize: number = 20
-): Promise<number[][]> {
+async function generateEmbeddingsBatched(texts: string[], apiKey: string, batchSize = 20): Promise<number[][]> {
+  if (!texts.length) return [];
+
   const allEmbeddings: number[][] = [];
 
   for (let i = 0; i < texts.length; i += batchSize) {
-    const batch = texts.slice(i, i + batchSize);
+    const batch = texts.slice(i, i + batchSize).map(t => t.substring(0, 8000));
 
     const response = await fetch("https://api.openai.com/v1/embeddings", {
       method: "POST",
@@ -333,13 +409,11 @@ async function generateEmbeddingsBatched(
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to generate embeddings: ${error}`);
+      throw new Error(`Failed to generate embeddings: ${await response.text()}`);
     }
 
     const data = await response.json();
-    const embeddings = data.data.map((item: { embedding: number[] }) => item.embedding);
-    allEmbeddings.push(...embeddings);
+    allEmbeddings.push(...data.data.map((item: { embedding: number[] }) => item.embedding));
   }
 
   return allEmbeddings;

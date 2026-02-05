@@ -49,7 +49,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="tu@empresa.com"
             required
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
+            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
           />
         </div>
       </div>
@@ -67,7 +67,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       <button
         type="submit"
         disabled={loading || !email}
-        className="w-full bg-emerald-500 text-white py-3 rounded-xl font-semibold hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+        className="w-full bg-orange-500 text-white py-3 rounded-xl font-semibold hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
       >
         {loading ? (
           <Loader2 className="w-5 h-5 animate-spin" />
