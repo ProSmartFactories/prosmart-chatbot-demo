@@ -3,6 +3,8 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
+// v2.0 - Authentication system enabled
+
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
