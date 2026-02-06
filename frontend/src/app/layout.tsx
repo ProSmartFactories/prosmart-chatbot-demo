@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
@@ -10,6 +10,15 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: "#075E54",
+};
+
 export const metadata: Metadata = {
   title: "ProSmart Factories - Technical Assistant Demo",
   description: "Chatbot RAG técnico que responde preguntas usando documentación PDF cargada por el usuario",
@@ -19,6 +28,11 @@ export const metadata: Metadata = {
     title: "ProSmart Factories - Technical Assistant Demo",
     description: "Asistente técnico inteligente basado en documentación",
     type: "website",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Encargado Digital",
   },
 };
 

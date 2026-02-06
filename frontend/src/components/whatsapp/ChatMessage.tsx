@@ -53,7 +53,7 @@ export function ChatMessage({ type, content, timestamp, images, isTyping }: Chat
           <TypingAnimation />
         ) : (
           <>
-            <div className="text-[14.5px] text-[#303030] whitespace-pre-wrap leading-[19px]">
+            <div className="text-[14.5px] text-[#303030] whitespace-pre-wrap break-words leading-[19px]" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
               {content}
             </div>
 

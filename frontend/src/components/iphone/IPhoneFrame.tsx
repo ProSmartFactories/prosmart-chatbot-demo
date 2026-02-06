@@ -1,15 +1,39 @@
 'use client';
 
 import { motion, useMotionValue, useTransform, useSpring } from 'framer-motion';
-import { useEffect, ReactNode } from 'react';
+import { useEffect, useState, ReactNode } from 'react';
 
 interface IPhoneFrameProps {
   children: ReactNode;
 }
 
+function useCurrentTime() {
+  const [time, setTime] = useState<string>('');
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      const madridTime = now.toLocaleTimeString('es-ES', {
+        timeZone: 'Europe/Madrid',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+      setTime(madridTime);
+    };
+
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return time;
+}
+
 export function IPhoneFrame({ children }: IPhoneFrameProps) {
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
+  const currentTime = useCurrentTime();
 
   // Smooth spring animation for the rotation
   const rotateX = useSpring(useTransform(mouseY, [-0.5, 0.5], [8, -8]), {
@@ -60,14 +84,14 @@ export function IPhoneFrame({ children }: IPhoneFrameProps) {
           <div className="relative w-full h-full bg-black rounded-[44px] overflow-hidden">
             {/* Status bar area */}
             <div className="absolute top-0 left-0 right-0 h-[54px] z-10 flex items-end justify-between px-8 pb-1">
-              <span className="text-white text-[14px] font-semibold">9:41</span>
+              <span className="text-white text-[14px] font-semibold">{currentTime || '9:41'}</span>
               <div className="flex items-center gap-1">
                 {/* Signal bars - smallest left, largest right */}
-                <div className="flex items-end gap-[2px]">
-                  <div className="w-[3px] h-[4px] bg-white rounded-sm" />
-                  <div className="w-[3px] h-[6px] bg-white rounded-sm" />
-                  <div className="w-[3px] h-[8px] bg-white rounded-sm" />
-                  <div className="w-[3px] h-[10px] bg-white rounded-sm" />
+                <div className="flex items-end gap-[1px]">
+                  <div className="w-[3px] h-[3px] bg-white rounded-[1px]" />
+                  <div className="w-[3px] h-[5px] bg-white rounded-[1px]" />
+                  <div className="w-[3px] h-[7px] bg-white rounded-[1px]" />
+                  <div className="w-[3px] h-[10px] bg-white rounded-[1px]" />
                 </div>
                 {/* WiFi */}
                 <svg className="w-[15px] h-[11px] text-white ml-1" fill="currentColor" viewBox="0 0 16 12">
