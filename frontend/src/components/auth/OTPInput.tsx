@@ -9,15 +9,17 @@ interface OTPInputProps {
   email: string;
   onSuccess: () => void;
   onBack: () => void;
+  verifyType?: 'email' | 'signup';
+  backLabel?: string;
 }
 
-export function OTPInput({ email, onSuccess, onBack }: OTPInputProps) {
+export function OTPInput({ email, onSuccess, onBack, verifyType = 'email', backLabel }: OTPInputProps) {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const { verifyOtp, sendOtp } = useAuth();
+  const { verifyOtp, sendOtp, resendSignupOtp } = useAuth();
 
   useEffect(() => {
     inputRefs.current[0]?.focus();
@@ -58,25 +60,39 @@ export function OTPInput({ email, onSuccess, onBack }: OTPInputProps) {
   };
 
   const handleSubmit = async (code: string) => {
+    if (loading) return;
     setError(null);
     setLoading(true);
 
-    const { error } = await verifyOtp(email, code);
+    try {
+      const result = await verifyOtp(email, code, verifyType);
 
-    if (error) {
-      setError('Código inválido. Intenta de nuevo.');
+      if (result.error) {
+        setError('Código inválido. Intenta de nuevo.');
+        setOtp(['', '', '', '', '', '']);
+        inputRefs.current[0]?.focus();
+        setLoading(false);
+      } else {
+        setSuccess(true);
+        setLoading(false);
+        setTimeout(onSuccess, 1000);
+      }
+    } catch (err) {
+      console.error('[OTP] Verification error:', err);
+      setError('Error al verificar. Intenta de nuevo.');
       setOtp(['', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
       setLoading(false);
-    } else {
-      setSuccess(true);
-      setTimeout(onSuccess, 1000);
     }
   };
 
   const handleResend = async () => {
     setError(null);
-    await sendOtp(email);
+    if (verifyType === 'signup') {
+      await resendSignupOtp(email);
+    } else {
+      await sendOtp(email);
+    }
     setOtp(['', '', '', '', '', '']);
     inputRefs.current[0]?.focus();
   };
@@ -88,7 +104,14 @@ export function OTPInput({ email, onSuccess, onBack }: OTPInputProps) {
       className="space-y-6"
     >
       <div className="text-center">
-        <p className="text-gray-600 mb-1">Código enviado a</p>
+        <h2 className="text-xl font-bold text-gray-900 mb-1">
+          {verifyType === 'signup' ? 'Verifica tu email' : 'Código de verificación'}
+        </h2>
+        <p className="text-gray-600 text-sm">
+          {verifyType === 'signup'
+            ? 'Ingresa el código de 6 dígitos enviado a'
+            : 'Código enviado a'}
+        </p>
         <p className="font-semibold text-gray-900">{email}</p>
       </div>
 
@@ -148,7 +171,7 @@ export function OTPInput({ email, onSuccess, onBack }: OTPInputProps) {
               onClick={onBack}
               className="text-gray-500 text-sm hover:underline"
             >
-              Usar otro email
+              {backLabel || 'Usar otro email'}
             </button>
           </div>
         </>

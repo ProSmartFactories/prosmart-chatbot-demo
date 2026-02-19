@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Re-extraer Chunks con GPT-4o</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    body { font-family: system-ui; max-width: 900px; margin: 40px auto; padding: 0 20px; background: #1a1a2e; color: #eee; }
+    h1 { color: #00d9ff; }
+    .status { padding: 8px 12px; margin: 4px 0; border-radius: 6px; font-size: 14px; }
+    .success { background: #0a3d0a; color: #4eff4e; }
+    .error { background: #3d0a0a; color: #ff4e4e; }
+    .info { background: #0a2a3d; color: #4eb8ff; }
+    .pending { background: #3d3d0a; color: #ffff4e; }
+    .warning { background: #3d2a0a; color: #ffb84e; }
+    button { background: #00d9ff; color: #000; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold; margin: 5px; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button:hover:not(:disabled) { background: #00b8d4; }
+    button.danger { background: #ff4e4e; }
+    button.danger:hover:not(:disabled) { background: #ff2020; }
+    #log { max-height: 600px; overflow-y: auto; margin-top: 20px; }
+    canvas { display: none; }
+    .progress { width: 100%; height: 8px; background: #333; border-radius: 4px; margin: 10px 0; }
+    .progress-bar { height: 100%; background: #00d9ff; border-radius: 4px; transition: width 0.3s; }
+    .chunk-preview { background: #0a2a3d; padding: 10px; margin: 5px 0; border-radius: 6px; font-size: 12px; max-height: 100px; overflow-y: auto; white-space: pre-wrap; }
+    .comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
+    .old { border-left: 3px solid #ff4e4e; padding-left: 10px; }
+    .new { border-left: 3px solid #4eff4e; padding-left: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Re-extraer Chunks con GPT-4o</h1>
+  <p>Este tool re-renderiza cada pagina del PDF y la re-procesa con <strong>gpt-4o</strong> (OCR mejorado) para obtener texto 100% fiel al manual.</p>
+  <p class="warning status">IMPORTANTE: Esto eliminara los chunks anteriores y los reemplazara con texto re-extraido por gpt-4o. Las imagenes NO se modifican.</p>
+
+  <div style="margin: 20px 0;">
+    <button id="btnStart" onclick="startReprocessing()">Iniciar Re-extraccion Completa</button>
+    <button id="btnStop" onclick="stopProcessing()" disabled class="danger">Detener</button>
+  </div>
+
+  <div class="progress"><div id="progressBar" class="progress-bar" style="width: 0%"></div></div>
+  <div id="progressText" class="info status" style="display:none"></div>
+  <div id="log"></div>
+  <canvas id="renderCanvas"></canvas>
+
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  const SUPABASE_URL = 'https://udpymbhxoybmiymrwitg.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkcHltYmh4b3libWl5bXJ3aXRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAwNTA5MzksImV4cCI6MjA4NTYyNjkzOX0.eDBlVSrPXGFUahM2tN-7iq8fWLg3UXnOj0RJjMuvSCg';
+  const USER_ID = 'cd6d7c03-0bd3-40c2-aa66-49e25579d1e6';
+  const DOCUMENT_ID = 'bdd4d604-b387-4fe2-8d23-d8df644189e0';
+  const PDF_URL = '/manual-tecnico.pdf';
+  const BATCH_SIZE = 3; // pages per batch to process-pdf
+  const SCALE = 2.0;    // render quality
+
+  let shouldStop = false;
+
+  function log(msg, cls = 'info') {
+    const el = document.getElementById('log');
+    const div = document.createElement('div');
+    div.className = `status ${cls}`;
+    div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function updateProgress(current, total) {
+    const pct = Math.round((current / total) * 100);
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('progressText').style.display = 'block';
+    document.getElementById('progressText').textContent = `Progreso: ${current}/${total} paginas (${pct}%)`;
+  }
+
+  async function renderPageToJpeg(pdf, pageNum) {
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale: SCALE });
+    const canvas = document.getElementById('renderCanvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    return canvas.toDataURL('image/jpeg', 0.92);
+  }
+
+  async function sendBatchToProcessPdf(pageImages, pageOffset, isFirstBatch) {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/process-pdf`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        document_id: DOCUMENT_ID,
+        user_id: USER_ID,
+        page_images: pageImages,
+        page_offset: pageOffset,
+        is_first_batch: isFirstBatch,
+        batch_index: isFirstBatch ? 0 : 1,
+        skip_image_delete: true,  // Preserve pre-cropped images
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`HTTP ${response.status}: ${text}`);
+    }
+
+    return await response.json();
+  }
+
+  function stopProcessing() {
+    shouldStop = true;
+    log('Deteniendo...', 'warning');
+    document.getElementById('btnStop').disabled = true;
+  }
+
+  async function startReprocessing() {
+    shouldStop = false;
+    document.getElementById('btnStart').disabled = true;
+    document.getElementById('btnStop').disabled = false;
+    document.getElementById('log').innerHTML = '';
+
+    try {
+      log('Cargando PDF...');
+      const pdf = await pdfjsLib.getDocument(PDF_URL).promise;
+      const totalPages = pdf.numPages;
+      log(`PDF cargado: ${totalPages} paginas`);
+
+      let processedPages = 0;
+      let totalChunks = 0;
+      let isFirstBatch = true;
+
+      for (let startPage = 1; startPage <= totalPages; startPage += BATCH_SIZE) {
+        if (shouldStop) {
+          log('Proceso detenido por el usuario', 'warning');
+          break;
+        }
+
+        const endPage = Math.min(startPage + BATCH_SIZE - 1, totalPages);
+        const batchPages = [];
+
+        log(`Renderizando paginas ${startPage}-${endPage}...`);
+
+        for (let p = startPage; p <= endPage; p++) {
+          if (shouldStop) break;
+          const jpeg = await renderPageToJpeg(pdf, p);
+          batchPages.push(jpeg);
+          processedPages++;
+          updateProgress(processedPages, totalPages);
+        }
+
+        if (shouldStop) break;
+
+        log(`Enviando batch (paginas ${startPage}-${endPage}) a process-pdf con gpt-4o...`, 'pending');
+
+        try {
+          const result = await sendBatchToProcessPdf(batchPages, startPage - 1, isFirstBatch);
+          isFirstBatch = false;
+
+          if (result.success) {
+            totalChunks += result.chunks_count || 0;
+            log(`OK: ${result.chunks_count || 0} chunks extraidos de paginas ${startPage}-${endPage}`, 'success');
+          } else {
+            log(`Error en batch ${startPage}-${endPage}: ${result.error || 'Unknown'}`, 'error');
+          }
+        } catch (err) {
+          log(`Error en batch ${startPage}-${endPage}: ${err.message}`, 'error');
+        }
+
+        // Delay between batches to avoid rate limits
+        if (startPage + BATCH_SIZE <= totalPages && !shouldStop) {
+          log('Esperando 3s antes del siguiente batch...', 'info');
+          await new Promise(r => setTimeout(r, 3000));
+        }
+      }
+
+      log(`COMPLETADO: ${totalChunks} chunks totales re-extraidos con gpt-4o`, 'success');
+
+    } catch (err) {
+      log(`Error fatal: ${err.message}`, 'error');
+    }
+
+    document.getElementById('btnStart').disabled = false;
+    document.getElementById('btnStop').disabled = true;
+  }
+</script>
+</body>
+</html>

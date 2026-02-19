@@ -1,8 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Check, CheckCheck } from 'lucide-react';
-import Image from 'next/image';
+import { CheckCheck, FileText, Download } from 'lucide-react';
 
 interface MessageImage {
   url: string;
@@ -15,11 +14,97 @@ interface ChatMessageProps {
   content: string;
   timestamp: string;
   images?: MessageImage[];
+  steps?: string[];
   isTyping?: boolean;
+  downloadUrl?: string;
 }
 
-export function ChatMessage({ type, content, timestamp, images, isTyping }: ChatMessageProps) {
+// Extract page numbers mentioned in a text string
+function extractPageNumbers(text: string): number[] {
+  const regex = /p[aá]gina\s+(\d+)/gi;
+  const numbers: number[] = [];
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    numbers.push(parseInt(match[1], 10));
+  }
+  return numbers;
+}
+
+function ImageBlock({ img }: { img: MessageImage }) {
+  if (img.url.startsWith('placeholder')) {
+    return (
+      <div className="rounded-lg overflow-hidden my-2">
+        <div className="relative w-full aspect-video bg-gray-100">
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#128C7E]/10 to-[#25D366]/10">
+            <div className="text-center p-4">
+              <div className="w-12 h-12 mx-auto mb-2 rounded-full bg-[#128C7E]/20 flex items-center justify-center">
+                <svg className="w-6 h-6 text-[#128C7E]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <p className="text-xs text-[#128C7E] font-medium">
+                {img.page_number ? `Página ${img.page_number}` : 'Imagen del documento'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg overflow-hidden my-2">
+      <div className="relative w-full bg-gray-100">
+        <img
+          src={img.url}
+          alt={img.caption}
+          className="w-full h-auto object-contain rounded-lg"
+          loading="lazy"
+        />
+      </div>
+      {img.caption && (
+        <p className="text-[11px] text-[#128C7E] mt-1 italic px-1">
+          {img.page_number ? `Pág. ${img.page_number} - ` : ''}{img.caption.slice(0, 80)}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function DocumentCard({ url }: { url: string }) {
+  return (
+    <a
+      href={url}
+      download
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block rounded-lg overflow-hidden my-2 border border-[#E0E0E0] hover:border-[#00A884] transition-colors cursor-pointer"
+    >
+      <div className="bg-gradient-to-r from-[#00A884]/10 to-[#128C7E]/10 p-3">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-lg bg-[#E84C3D] flex items-center justify-center flex-shrink-0">
+            <FileText className="w-6 h-6 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[14px] text-[#303030] font-medium truncate">
+              Manual Técnico MX-340G
+            </p>
+            <p className="text-[12px] text-[#667781]">
+              43 páginas · PDF
+            </p>
+          </div>
+          <div className="flex-shrink-0 w-10 h-10 rounded-full bg-[#00A884] flex items-center justify-center">
+            <Download className="w-5 h-5 text-white" />
+          </div>
+        </div>
+      </div>
+    </a>
+  );
+}
+
+export function ChatMessage({ type, content, timestamp, images, steps, isTyping, downloadUrl }: ChatMessageProps) {
   const isUser = type === 'user';
+  const hasStepsWithImages = !isUser && steps && steps.length >= 1 && images && images.length > 0;
 
   return (
     <motion.div
@@ -52,49 +137,12 @@ export function ChatMessage({ type, content, timestamp, images, isTyping }: Chat
         {isTyping ? (
           <TypingAnimation />
         ) : (
-          <>
-            <div className="text-[14.5px] text-[#303030] whitespace-pre-wrap break-words leading-[19px]" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-              {content}
-            </div>
+          <ContentWithInlineImages content={content} />
+        )}
 
-            {/* Images */}
-            {images && images.length > 0 && (
-              <div className="mt-2 space-y-2">
-                {images.map((img, index) => (
-                  <div key={index} className="rounded-lg overflow-hidden">
-                    <div className="relative w-full aspect-video bg-gray-100">
-                      {img.url.startsWith('placeholder') ? (
-                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#128C7E]/10 to-[#25D366]/10">
-                          <div className="text-center p-4">
-                            <div className="w-12 h-12 mx-auto mb-2 rounded-full bg-[#128C7E]/20 flex items-center justify-center">
-                              <svg className="w-6 h-6 text-[#128C7E]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                            </div>
-                            <p className="text-xs text-[#128C7E] font-medium">
-                              {img.page_number ? `Página ${img.page_number}` : 'Imagen del documento'}
-                            </p>
-                          </div>
-                        </div>
-                      ) : (
-                        <Image
-                          src={img.url}
-                          alt={img.caption}
-                          fill
-                          className="object-cover"
-                        />
-                      )}
-                    </div>
-                    {img.caption && (
-                      <p className="text-[12px] text-gray-600 mt-1 italic px-1">
-                        {img.caption}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
+        {/* Download card */}
+        {downloadUrl && !isTyping && (
+          <DocumentCard url={downloadUrl} />
         )}
 
         {/* Timestamp and read status */}
@@ -108,6 +156,65 @@ export function ChatMessage({ type, content, timestamp, images, isTyping }: Chat
         )}
       </div>
     </motion.div>
+  );
+}
+
+function ContentWithInlineImages({ content }: { content: string }) {
+  // Parse content for inline image markers: [IMG:url|caption]
+  const imgMarkerRegex = /\[IMG:(.*?)\|(.*?)\]/g;
+  const hasInlineImages = imgMarkerRegex.test(content);
+
+  if (!hasInlineImages) {
+    // No inline images - render plain text
+    return (
+      <div className="text-[14.5px] text-[#303030] whitespace-pre-wrap break-words leading-[19px]" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+        {content}
+      </div>
+    );
+  }
+
+  // Split content by image markers and render text + images inline
+  const parts: Array<{ type: 'text'; value: string } | { type: 'image'; url: string; caption: string }> = [];
+  let lastIndex = 0;
+  imgMarkerRegex.lastIndex = 0; // Reset regex
+
+  let match;
+  while ((match = imgMarkerRegex.exec(content)) !== null) {
+    // Add text before this marker
+    if (match.index > lastIndex) {
+      const textBefore = content.slice(lastIndex, match.index).trim();
+      if (textBefore) {
+        parts.push({ type: 'text', value: textBefore });
+      }
+    }
+    // Add image
+    parts.push({ type: 'image', url: match[1], caption: match[2] });
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text after last marker
+  if (lastIndex < content.length) {
+    const remaining = content.slice(lastIndex).trim();
+    if (remaining) {
+      parts.push({ type: 'text', value: remaining });
+    }
+  }
+
+  return (
+    <div className="text-[14.5px] text-[#303030] leading-[19px]" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+      {parts.map((part, i) => {
+        if (part.type === 'text') {
+          return (
+            <div key={i} className="whitespace-pre-wrap break-words">
+              {part.value}
+            </div>
+          );
+        }
+        return (
+          <ImageBlock key={i} img={{ url: part.url, caption: part.caption }} />
+        );
+      })}
+    </div>
   );
 }
 

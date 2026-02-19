@@ -20,7 +20,7 @@ export function ChatInput({ onSend, onAttach, disabled }: ChatInputProps) {
     }
   };
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -48,14 +48,20 @@ export function ChatInput({ onSend, onAttach, disabled }: ChatInputProps) {
 
       {/* Input field */}
       <div className="flex-1 relative">
-        <input
-          type="text"
+        <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
           placeholder="Mensaje"
-          className="w-full bg-white rounded-[25px] px-4 py-[10px] text-[15px] text-[#3B4A54] placeholder-[#667781] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+          rows={1}
+          className="w-full bg-white rounded-[25px] px-4 py-[10px] text-[15px] text-[#3B4A54] placeholder-[#667781] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed resize-none overflow-hidden leading-[20px] max-h-[100px]"
+          style={{ height: 'auto' }}
+          onInput={(e) => {
+            const target = e.target as HTMLTextAreaElement;
+            target.style.height = 'auto';
+            target.style.height = Math.min(target.scrollHeight, 100) + 'px';
+          }}
         />
       </div>
 

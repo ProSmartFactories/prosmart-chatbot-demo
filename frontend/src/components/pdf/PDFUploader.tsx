@@ -4,11 +4,16 @@ import { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileText, X, Upload, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import * as pdfjsLib from 'pdfjs-dist';
 
-// Configure PDF.js worker
-if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// pdfjs-dist is loaded dynamically to avoid SSR issues
+let pdfjsLib: typeof import('pdfjs-dist') | null = null;
+
+async function getPdfJs() {
+  if (!pdfjsLib) {
+    pdfjsLib = await import('pdfjs-dist');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.mjs`;
+  }
+  return pdfjsLib;
 }
 
 interface PDFUploaderProps {
@@ -51,7 +56,7 @@ export function PDFUploader({
   }, [onStatusUpdate]);
 
   // Convert PDF page to image
-  const pageToImage = async (page: pdfjsLib.PDFPageProxy, scale: number = 1.5): Promise<string> => {
+  const pageToImage = async (page: any, scale: number = 1.5): Promise<string> => {
     const viewport = page.getViewport({ scale });
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d')!;
@@ -70,7 +75,8 @@ export function PDFUploader({
 
   // Extract page images from PDF
   const extractPageImages = async (arrayBuffer: ArrayBuffer): Promise<string[]> => {
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const pdfjs = await getPdfJs();
+    const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
     const pageImages: string[] = [];
     const totalPages = pdf.numPages;
 
@@ -96,7 +102,8 @@ export function PDFUploader({
 
   // Extract embedded images from PDF (optional, for diagrams)
   const extractEmbeddedImages = async (arrayBuffer: ArrayBuffer): Promise<ExtractedImage[]> => {
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const pdfjs = await getPdfJs();
+    const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
     const embeddedImages: ExtractedImage[] = [];
 
     // For now, we'll rely on page images for diagrams
@@ -113,8 +120,8 @@ export function PDFUploader({
     }
 
     const fileSizeMB = file.size / (1024 * 1024);
-    if (fileSizeMB > 50) {
-      setError('El archivo no puede superar 50MB');
+    if (fileSizeMB > 10) {
+      setError('El archivo no puede superar 10MB');
       return;
     }
 
@@ -124,9 +131,17 @@ export function PDFUploader({
     try {
       // Step 1: Upload to Storage
       updateStatus('uploading', 'Subiendo documento...');
-      setProgress(10);
+      setProgress(5);
 
       const filePath = `${userId}/document.pdf`;
+
+      // Simulate progress during upload so user sees movement
+      let uploadProgress = 5;
+      const progressInterval = setInterval(() => {
+        uploadProgress = Math.min(uploadProgress + 1, 18);
+        setProgress(uploadProgress);
+        setProgressText('Subiendo documento...');
+      }, 800);
 
       const { error: uploadError } = await supabase.storage
         .from('user-documents')
@@ -134,6 +149,8 @@ export function PDFUploader({
           upsert: true,
           cacheControl: '3600',
         });
+
+      clearInterval(progressInterval);
 
       if (uploadError) {
         throw new Error(`Error al subir: ${uploadError.message}`);
@@ -159,63 +176,140 @@ export function PDFUploader({
         throw new Error(`Error al registrar: ${docError.message}`);
       }
 
-      // Step 3: Extract page images (client-side)
-      updateStatus('extracting', 'Analizando documento...');
+      // Step 3: Extract page images for Vision-based processing
+      updateStatus('extracting', 'Convirtiendo páginas a imágenes...');
+      setProgress(25);
 
-      const arrayBuffer = await file.arrayBuffer();
       let pageImages: string[] = [];
+      try {
+        setProgressText('Leyendo documento...');
+        const arrayBuffer = await file.arrayBuffer();
 
-      // Only extract page images for reasonable file sizes (< 15MB)
-      // Larger files will use the fallback Assistants API
-      if (fileSizeMB < 15) {
-        try {
-          pageImages = await extractPageImages(arrayBuffer);
-          console.log(`Extracted ${pageImages.length} page images`);
-        } catch (err) {
-          console.warn('Could not extract page images, using fallback:', err);
-          pageImages = [];
+        setProgressText('Preparando motor de lectura...');
+        const pdfjs = await getPdfJs();
+        const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+        const totalPages = Math.min(pdf.numPages, 50); // Limit to 50 pages
+
+        // Reuse a single canvas for all pages (avoids GC pressure)
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d')!;
+
+        for (let i = 1; i <= totalPages; i++) {
+          const page = await pdf.getPage(i);
+          // Scale 1.0 + JPEG 65% = good quality for figure cropping + readable for gpt-4o
+          const viewport = page.getViewport({ scale: 1.0 });
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          await page.render({ canvasContext: context, viewport }).promise;
+          const imageData = canvas.toDataURL('image/jpeg', 0.65);
+          pageImages.push(imageData);
+
+          const extractProgress = 25 + Math.round((i / totalPages) * 25);
+          setProgress(extractProgress);
+          setProgressText(`Convirtiendo página ${i}/${totalPages}...`);
         }
+        console.log(`Extracted ${pageImages.length} page images`);
+      } catch (imgErr) {
+        console.warn('Could not extract page images:', imgErr);
+        throw new Error('No se pudo leer el PDF. Intenta con otro archivo o desde un navegador de escritorio.');
       }
 
-      setProgress(50);
+      if (pageImages.length === 0) {
+        throw new Error('No se pudieron extraer páginas del PDF. Verifica que el archivo no esté dañado.');
+      }
 
-      // Step 4: Trigger processing
+      // Step 4: Process pages - 4 pages per request, 6 requests in parallel
       updateStatus('processing', 'Procesando con IA...');
-      setProgress(60);
+      setProgress(55);
 
-      const requestBody: {
-        document_id: string;
-        user_id: string;
-        page_images?: string[];
-      } = {
-        document_id: docData.id,
-        user_id: userId,
+      const functionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/process-pdf`;
+      const PAGES_PER_BATCH = 4;
+      const CONCURRENCY = 6;
+      let totalChunks = 0;
+      let completedPages = 0;
+
+      // Build batches of pages
+      const batches: { startIndex: number; count: number }[] = [];
+      for (let i = 0; i < pageImages.length; i += PAGES_PER_BATCH) {
+        batches.push({
+          startIndex: i,
+          count: Math.min(PAGES_PER_BATCH, pageImages.length - i),
+        });
+      }
+
+      const processBatch = async (batch: { startIndex: number; count: number }, isFirst: boolean): Promise<number> => {
+        const batchImages = pageImages.slice(batch.startIndex, batch.startIndex + batch.count);
+        const maxRetries = 2;
+
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          try {
+            const response = await fetch(functionUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+              },
+              body: JSON.stringify({
+                document_id: docData.id,
+                user_id: userId,
+                page_images: batchImages,
+                batch_index: Math.floor(batch.startIndex / PAGES_PER_BATCH),
+                total_batches: batches.length,
+                page_offset: batch.startIndex,
+                is_first_batch: isFirst,
+              }),
+            });
+
+            if (!response.ok) {
+              console.error(`Batch ${batch.startIndex + 1}-${batch.startIndex + batch.count} error: ${response.status}`);
+              if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000)); continue; }
+              return 0;
+            }
+
+            const result = await response.json();
+            if (!result?.success) {
+              console.error(`Batch failed:`, result?.error);
+              if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000)); continue; }
+              return 0;
+            }
+            return result.chunks_count || 0;
+          } catch (fetchErr) {
+            console.error(`Batch fetch error (attempt ${attempt + 1}):`, fetchErr);
+            if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 3000)); continue; }
+            return 0;
+          }
+        }
+        return 0;
       };
 
-      // Only send page images if we have them (enables Vision processing)
-      if (pageImages.length > 0) {
-        requestBody.page_images = pageImages;
-        setProgressText(`Analizando ${pageImages.length} páginas con IA...`);
-      } else {
-        setProgressText('Extrayendo texto del documento...');
+      // First batch alone (clears old data)
+      const firstBatch = batches[0];
+      setProgressText(`Analizando páginas 1-${firstBatch.count} de ${pageImages.length}...`);
+      totalChunks += await processBatch(firstBatch, true);
+      completedPages = firstBatch.count;
+      setProgress(55 + Math.round((completedPages / pageImages.length) * 40));
+
+      // Remaining batches in parallel groups of CONCURRENCY
+      for (let i = 1; i < batches.length; i += CONCURRENCY) {
+        const group = batches.slice(i, i + CONCURRENCY);
+        const startPage = group[0].startIndex + 1;
+        const endPage = group[group.length - 1].startIndex + group[group.length - 1].count;
+
+        setProgressText(`Analizando páginas ${startPage}-${endPage} de ${pageImages.length}...`);
+
+        const results = await Promise.all(group.map(b => processBatch(b, false)));
+        for (const chunks of results) {
+          totalChunks += chunks;
+        }
+
+        completedPages += group.reduce((sum, b) => sum + b.count, 0);
+        setProgress(55 + Math.round((completedPages / pageImages.length) * 40));
       }
 
-      const { data: processData, error: processError } = await supabase.functions.invoke('process-pdf', {
-        body: requestBody,
-      });
-
-      if (processError) {
-        throw new Error(`Error al procesar: ${processError.message}`);
-      }
-
-      if (!processData?.success) {
-        throw new Error(processData?.error || 'Error desconocido al procesar');
-      }
+      console.log(`All ${pageImages.length} pages complete. Total chunks: ${totalChunks}`);
 
       setProgress(100);
       updateStatus('complete', 'Base de conocimiento lista');
-
-      console.log('Processing result:', processData);
 
       // Wait a moment before closing
       setTimeout(() => {
@@ -299,7 +393,7 @@ export function PDFUploader({
                   o haz clic para seleccionar
                 </p>
                 <p className="text-[11px] text-[#667781] mt-2">
-                  Máximo 50MB - Se analizarán texto y diagramas
+                  Máximo 10MB - Se analizarán texto y diagramas
                 </p>
               </div>
             )}

@@ -20,14 +20,18 @@ export type Document = {
   created_at: string;
 };
 
+export type MessageImage = {
+  url: string;
+  caption: string;
+  page_number: number;
+};
+
 export type ChatMessage = {
   id: string;
   type: 'user' | 'bot';
   content: string;
   timestamp: string;
-  images?: Array<{
-    url: string;
-    caption: string;
-    page_number: number;
-  }>;
+  images?: MessageImage[];
+  steps?: string[];
+  downloadUrl?: string;
 };
