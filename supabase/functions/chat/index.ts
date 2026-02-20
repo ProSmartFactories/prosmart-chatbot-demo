@@ -117,8 +117,14 @@ serve(async (req) => {
     console.log(`Chat request from user: ${user_id}`);
     console.log(`Message: ${message.substring(0, 100)}...`);
 
-    // 1. Generate embedding for the user's question
-    const questionEmbedding = await generateEmbedding(message, openaiApiKey);
+    // 0. Normalize query: fix typos before embedding to ensure consistent vector search
+    const normalizedMessage = await normalizeQuery(message, openaiApiKey);
+    if (normalizedMessage !== message) {
+      console.log(`Query normalized: "${message}" -> "${normalizedMessage}"`);
+    }
+
+    // 1. Generate embedding for the NORMALIZED question (ensures typos don't affect search)
+    const questionEmbedding = await generateEmbedding(normalizedMessage, openaiApiKey);
     console.log(`Embedding generated: ${questionEmbedding.length} dimensions, first 3: [${questionEmbedding.slice(0, 3).join(', ')}]`);
 
     // 2. Search for relevant document chunks - balanced threshold for quality
@@ -254,6 +260,62 @@ serve(async (req) => {
     rawResponse = rawResponse.replace(/\[(?:IMAGEN|VER IMAGEN|IMG):[^\]]*\]/gi, '');
 
     console.log(`Response length: ${rawResponse.length} chars`);
+
+    // 5.5. Supplement images: extract figure numbers from GPT response and fetch missing images directly
+    const figureNumbersInResponse = new Set<number>();
+    const figRefScan = /(?:figuras?|fig\.?)\s*(\d+)(?:\s*(?:y|,)\s*(\d+))?/gi;
+    let scanMatch;
+    while ((scanMatch = figRefScan.exec(rawResponse)) !== null) {
+      figureNumbersInResponse.add(parseInt(scanMatch[1], 10));
+      if (scanMatch[2]) figureNumbersInResponse.add(parseInt(scanMatch[2], 10));
+    }
+
+    // Check which figures from the response are NOT covered by the vector search results
+    const coveredFigures = new Set<number>();
+    for (const img of relevantImages) {
+      const urlLower = (img.image_url || '').toLowerCase();
+      const ctxLower = (img.context || '').toLowerCase();
+      for (const fn of figureNumbersInResponse) {
+        const patterns = [`figura-${fn}.`, `figura-${fn}-`, `figura ${fn} `, `figura ${fn}.`, `figura ${fn},`, `figura ${fn})`];
+        if (patterns.some(p => urlLower.includes(p) || ctxLower.includes(p))) {
+          coveredFigures.add(fn);
+        }
+      }
+    }
+
+    const missingFigures = [...figureNumbersInResponse].filter(fn => !coveredFigures.has(fn));
+    if (missingFigures.length > 0) {
+      console.log(`Missing figures not in vector results: ${missingFigures.join(', ')}. Fetching directly...`);
+      // Fetch all images for this user and filter by figure number
+      const { data: allUserImages } = await supabase
+        .from('document_images')
+        .select('id, image_url, context, page_number')
+        .eq('user_id', searchUserId);
+
+      if (allUserImages) {
+        for (const img of allUserImages) {
+          const urlLower = (img.image_url || '').toLowerCase();
+          const ctxLower = (img.context || '').toLowerCase();
+          for (const fn of missingFigures) {
+            const patterns = [`figura-${fn}.`, `figura-${fn}-`, `figura ${fn} `, `figura ${fn}.`, `figura ${fn},`, `figura ${fn})`];
+            if (patterns.some(p => urlLower.includes(p) || ctxLower.includes(p))) {
+              // Add to relevantImages if not already present
+              const alreadyPresent = relevantImages.some(ri => ri.id === img.id);
+              if (!alreadyPresent) {
+                relevantImages.push({
+                  id: img.id,
+                  image_url: img.image_url,
+                  context: img.context || '',
+                  page_number: img.page_number,
+                  similarity: 0.5, // synthetic similarity score
+                });
+                console.log(`Directly fetched: Figura ${fn} -> image ${img.id}`);
+              }
+            }
+          }
+        }
+      }
+    }
 
     // 6. Insert images INLINE in the response text where figures are referenced
     const { enrichedResponse, usedImages } = insertInlineImages(rawResponse, relevantImages, finalChunks || []);
@@ -548,6 +610,50 @@ function insertInlineImages(
   }
 
   return { enrichedResponse: enriched, usedImages };
+}
+
+async function normalizeQuery(query: string, apiKey: string): Promise<string> {
+  // Quick check: if query looks clean (only common chars, proper Spanish), skip normalization
+  const hasObviousIssues = /[a-záéíóúñü]{2,}(mm|nn|ss|tt|ll(?!a|e|o)|rr(?!a|e|i|o))|[bcdfghjklmpqrstvwxyz]{4,}/i.test(query)
+    || /\b(con|las|los|del|der|dek)\b/i.test(query) && query.length < 80;
+
+  if (!hasObviousIssues && query.length < 200) {
+    return query;
+  }
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "Corrige errores ortográficos y tipográficos en la pregunta del usuario. Devuelve SOLO la pregunta corregida, sin explicaciones. Si la pregunta está bien escrita, devuélvela tal cual. Mantén el mismo idioma y tono."
+          },
+          { role: "user", content: query }
+        ],
+        temperature: 0,
+        max_tokens: 200,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn("Query normalization failed, using original");
+      return query;
+    }
+
+    const data = await response.json();
+    const normalized = data.choices[0]?.message?.content?.trim();
+    return normalized || query;
+  } catch {
+    console.warn("Query normalization error, using original");
+    return query;
+  }
 }
 
 async function generateEmbedding(text: string, apiKey: string): Promise<number[]> {
