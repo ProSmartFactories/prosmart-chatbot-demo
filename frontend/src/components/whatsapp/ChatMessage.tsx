@@ -1,7 +1,8 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { CheckCheck, FileText, Download } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { CheckCheck, FileText, Download, X, ZoomIn } from 'lucide-react';
+import { useState } from 'react';
 
 interface MessageImage {
   url: string;
@@ -30,7 +31,43 @@ function extractPageNumbers(text: string): number[] {
   return numbers;
 }
 
+function ImageLightbox({ url, caption, onClose }: { url: string; caption: string; onClose: () => void }) {
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+        onClick={onClose}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+        <motion.img
+          initial={{ scale: 0.8 }}
+          animate={{ scale: 1 }}
+          src={url}
+          alt={caption}
+          className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        />
+        {caption && (
+          <p className="absolute bottom-6 left-0 right-0 text-center text-white/70 text-sm italic px-4">
+            {caption}
+          </p>
+        )}
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
 function ImageBlock({ img }: { img: MessageImage }) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
   if (img.url.startsWith('placeholder')) {
     return (
       <div className="rounded-lg overflow-hidden my-2">
@@ -53,21 +90,41 @@ function ImageBlock({ img }: { img: MessageImage }) {
   }
 
   return (
-    <div className="rounded-lg overflow-hidden my-2">
-      <div className="relative w-full bg-gray-100">
-        <img
-          src={img.url}
-          alt={img.caption}
-          className="w-full h-auto object-contain rounded-lg"
-          loading="lazy"
-        />
+    <>
+      <div
+        className="rounded-lg overflow-hidden my-2 cursor-zoom-in relative group"
+        onClick={() => setLightboxOpen(true)}
+      >
+        <div className="relative bg-white border border-gray-200 rounded-lg">
+          <img
+            src={img.url}
+            alt={img.caption}
+            className="max-w-full w-auto mx-auto block object-contain rounded-lg"
+            style={{ maxHeight: '260px' }}
+            loading="lazy"
+          />
+          {/* Zoom hint overlay */}
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors rounded-lg flex items-center justify-center">
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 rounded-full p-2">
+              <ZoomIn className="w-5 h-5 text-white" />
+            </div>
+          </div>
+        </div>
+        {img.caption && (
+          <p className="text-[11px] text-[#128C7E] mt-1 italic px-1">
+            {img.caption}
+          </p>
+        )}
       </div>
-      {img.caption && (
-        <p className="text-[11px] text-[#128C7E] mt-1 italic px-1">
-          {img.page_number ? `Pág. ${img.page_number} - ` : ''}{img.caption.slice(0, 80)}
-        </p>
+
+      {lightboxOpen && (
+        <ImageLightbox
+          url={img.url}
+          caption={img.caption}
+          onClose={() => setLightboxOpen(false)}
+        />
       )}
-    </div>
+    </>
   );
 }
 
