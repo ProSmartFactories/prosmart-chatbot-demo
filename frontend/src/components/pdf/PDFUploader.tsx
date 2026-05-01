@@ -196,12 +196,12 @@ export function PDFUploader({
 
         for (let i = 1; i <= totalPages; i++) {
           const page = await pdf.getPage(i);
-          // Scale 1.0 + JPEG 65% = good quality for figure cropping + readable for gpt-4o
-          const viewport = page.getViewport({ scale: 1.0 });
+          // Scale 2.0 + JPEG 92% = high resolution for readable figures in chat
+          const viewport = page.getViewport({ scale: 2.0 });
           canvas.width = viewport.width;
           canvas.height = viewport.height;
           await page.render({ canvasContext: context, viewport }).promise;
-          const imageData = canvas.toDataURL('image/jpeg', 0.65);
+          const imageData = canvas.toDataURL('image/jpeg', 0.92);
           pageImages.push(imageData);
 
           const extractProgress = 25 + Math.round((i / totalPages) * 25);

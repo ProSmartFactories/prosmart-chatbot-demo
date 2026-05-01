@@ -257,7 +257,7 @@ function cropJpegImage(
       croppedData.set(data.subarray(srcOffset, srcOffset + cropW * 4), dstOffset);
     }
 
-    const encoded = jpeg.encode({ data: croppedData, width: cropW, height: cropH }, 85);
+    const encoded = jpeg.encode({ data: croppedData, width: cropW, height: cropH }, 95);
     return encoded.data;
   } catch (error) {
     console.error("Crop JPEG error:", error);
