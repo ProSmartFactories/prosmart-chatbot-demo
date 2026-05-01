@@ -18,15 +18,23 @@ interface ActivityChartProps {
   data: DailyActivity[];
 }
 
-function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; dataKey: string; color: string }>; label?: string }) {
-  if (!active || !payload) return null;
+function parseLocalDate(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('T')[0].split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
 
-  const date = new Date(label || '');
-  const formatted = date.toLocaleDateString('es-ES', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  });
+function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ value: number; dataKey: string; color: string; payload?: { fullDate?: string } }>; label?: string }) {
+  if (!active || !payload || payload.length === 0) return null;
+
+  const fullDate = payload[0]?.payload?.fullDate;
+  const date = fullDate ? parseLocalDate(fullDate) : null;
+  const formatted = date && !isNaN(date.getTime())
+    ? date.toLocaleDateString('es-ES', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+      })
+    : '';
 
   return (
     <div className="bg-slate-800/95 backdrop-blur-sm border border-slate-700/50 rounded-xl p-3 shadow-xl">
@@ -50,7 +58,7 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
 export function ActivityChart({ data }: ActivityChartProps) {
   const chartData = data.map((d) => ({
     ...d,
-    date: new Date(d.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
+    date: parseLocalDate(d.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
     fullDate: d.date,
   }));
 

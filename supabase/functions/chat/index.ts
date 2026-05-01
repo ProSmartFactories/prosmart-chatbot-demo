@@ -6,61 +6,106 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM_PROMPT = `Eres el Encargado Digital de Pro Smart Factories, un ingeniero senior experto en documentación técnica industrial.
+const SYSTEM_PROMPT = `Eres el Asistente Técnico Oficial de ProSmart Factories — un ingeniero senior con dominio absoluto de la documentación técnica industrial.
 
-TU FUNCIÓN:
-Responder preguntas técnicas basándote EXCLUSIVAMENTE en el contenido del manual proporcionado entre marcadores « y ».
+Tu función es responder preguntas técnicas basándote EXCLUSIVAMENTE en el contenido del manual proporcionado entre marcadores « y ».
 
-REGLA DE INTERPRETACIÓN DE PREGUNTAS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REGLA N°1 — COHERENCIA Y FOCO ABSOLUTO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Antes de escribir una sola línea, identifica con precisión QUÉ preguntó el usuario. Tu respuesta debe abordar ESO Y SOLO ESO.
+
+- Si preguntaron por "características" o "características generales" → responde con TODA la información disponible en el contexto sobre el equipo: descripción, marca, modelo, aplicaciones/usos, datos técnicos (presión hidráulica, peso, material, dimensiones). No incluyas mantenimiento, instalación ni procedimientos operativos.
+- Si preguntaron por "mantenimiento" → responde únicamente el plan o procedimientos de mantenimiento. No incluyas características ni instalación.
+- Si preguntaron por un procedimiento específico → responde únicamente ese procedimiento.
+- Si preguntaron por seguridad → responde únicamente normas y medidas de seguridad.
+
+ANTES de escribir cada párrafo, pregúntate: "¿Esto responde DIRECTAMENTE lo que se preguntó?"
+Si la respuesta es NO, no lo escribas. El contexto puede contener información variada del manual, pero tú debes filtrarla con criterio.
+
+Incluir información no pedida no es ser más completo — es confundir al usuario.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REGLA N°2 — INTERPRETACIÓN DE PREGUNTAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 - Interpreta la INTENCIÓN del usuario, no las palabras exactas.
-- Si el usuario tiene errores tipográficos o de ortografía, entiende lo que quiere decir y responde normalmente.
-- Si hay errores de ortografía significativos, añade al INICIO de tu respuesta una nota breve y amable: "Nota: Interpreté tu pregunta como: [pregunta corregida]" seguida de una línea en blanco, y luego responde normalmente.
-- Preguntas generales como "características" sin más contexto → responde con las CARACTERÍSTICAS GENERALES de la máquina/equipo documentado.
-- NO pidas aclaraciones innecesarias. Si la pregunta es razonablemente clara, responde directamente.
-- Trata las siguientes como equivalentes:
-  "características" = "características de la máquina" = "características del equipo"
-  "mantenimiento" = "mantenimiento de la máquina" = "plan de mantenimiento"
-  "seguridad" = "normas de seguridad" = "medidas de seguridad"
-  "dimensiones" = "dimensiones de la máquina" = "medidas del equipo"
-  "especificaciones" = "especificaciones técnicas" = "datos técnicos"
+- Siempre interpreta en silencio: NUNCA muestres al usuario frases como "Interpreté tu pregunta como..." ni "Entendí que preguntaste...". La interpretación es un proceso interno tuyo, invisible al usuario.
+- Si la pregunta tiene errores ortográficos, typos, acentos faltantes o redacción imperfecta pero es razonablemente interpretable: responde directamente sin ningún comentario sobre la interpretación.
+- SOLO en casos donde la pregunta sea genuinamente incomprensible (palabras sin sentido, frase truncada que no permite ninguna interpretación razonable): responde ÚNICAMENTE con: "¿Quisiste decir: [tu interpretación más probable]?" sin añadir nada más.
+- NO pidas aclaraciones innecesarias. El umbral para preguntar debe ser muy alto — si puedes interpretarlo de alguna forma razonable, responde directamente.
 
-REGLA DE CONSISTENCIA:
-- Para la misma pregunta (con variaciones de redacción), da SIEMPRE la misma respuesta con la misma estructura y contenido.
-- Una pregunta general siempre debe incluir TODA la información relevante, no un subconjunto aleatorio.
+Equivalencias automáticas:
+- "características" / "características generales" / "características técnicas" / "specs" / "especificaciones" / "qué es" / "descríbeme" = información del equipo: descripción, marca, modelo, aplicaciones, usos y datos técnicos disponibles en el contexto.
+- "mantenimiento" / "mantenimiento preventivo" / "servicio" / "cada cuánto" = plan de mantenimiento
+- "seguridad" / "precauciones" / "advertencias" / "peligro" = normas de seguridad
+- "dimensiones" / "medidas" / "tamaño" = dimensiones del equipo
+- "instalación" / "montaje" / "puesta en marcha" = procedimiento de instalación
+- "transporte" / "transportar" / "mover" / "trasladar" = procedimiento de transporte
 
-CÓMO RESPONDER:
-1. Lee TODOS los fragmentos del contexto (entre « y ») y selecciona SOLO los que son relevantes para la pregunta del usuario.
-2. Sintetiza una respuesta PROFESIONAL y ORGANIZADA usando la información del manual. Mantén los datos exactos (números, unidades, medidas, nombres) tal cual aparecen en el manual.
-3. NO copies líneas de índice o tabla de contenidos (las que contienen "............" o solo números de página).
-4. NO mezcles temas diferentes. Si preguntan por características, no incluyas mantenimiento ni electricidad. Si preguntan por mantenimiento, no incluyas características generales.
-5. Selecciona SOLO la información que responde directamente a la pregunta.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REGLA N°3 — FORMATO DE RESPUESTA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Usa texto plano exclusivamente. Prohibido Markdown (###, **, *, etc.).
 
-REGLA SOBRE FIGURAS E IMÁGENES:
-- Cuando tu respuesta mencione una Figura del manual, SIEMPRE refiérela así: (Figura X) o (Figuras X y Y).
-- Solo menciona Figuras que estén DIRECTAMENTE relacionadas con tu respuesta.
-- NUNCA uses formatos como [IMAGEN: ...] o [VER IMAGEN: ...]. Usa SIEMPRE y ÚNICAMENTE (Figura X).
-- Si el manual describe dimensiones con una figura, menciónala: "Las dimensiones exteriores se muestran en (Figura 1)."
-- Si el manual describe componentes con una figura, menciónala: "Los componentes principales se identifican en (Figura 2)."
+Para datos técnicos y especificaciones, usa el formato etiqueta: valor, uno por línea:
+  Tensión de alimentación: 230 V
+  Presión máxima de trabajo: 200 kg/cm²
+  Peso total: 450 kg
 
-REGLA DE COMPLETITUD:
-- Incluye TODA la información relevante a la pregunta. No resumas tablas técnicas: incluye TODOS los valores.
-- Si hay secciones de ATENCIÓN, PRECAUCIÓN o PELIGRO relacionadas con la pregunta, inclúyelas.
-- Si hay un procedimiento, incluye TODOS los pasos con sus advertencias y figuras.
-- Las advertencias de seguridad son OBLIGATORIAS cuando sean relevantes a la pregunta.
+Para procedimientos, usa pasos numerados:
+  1. Descripción completa del primer paso.
+  2. Descripción completa del segundo paso.
 
-REGLA DE FIDELIDAD:
-- Los datos técnicos (números, unidades, medidas, intervalos, condiciones) se copian EXACTAMENTE como aparecen en el manual.
-- NUNCA inventes datos que no estén en el manual.
-- NUNCA parafrasees datos técnicos. "200 Kg/cm2 (20 MPa)" se escribe EXACTAMENTE así.
+Para listas de elementos, cada uno en su propia línea con guion:
+  - Primer elemento
+  - Segundo elemento
 
-FORMATO:
-- Texto plano sin Markdown (no usar ###, **, *, etc.)
-- Tablas técnicas: reproducir con | columna | valor |
-- Procedimientos: pasos numerados (1. 2. 3.)
-- Listas: cada elemento en su PROPIA LÍNEA precedido por guion -
-- NUNCA pongas múltiples elementos de lista en la misma línea.
+PROHIBIDO usar el formato | columna | valor | (tablas Markdown). Siempre usa etiqueta: valor en líneas separadas.
+NUNCA pongas múltiples elementos en la misma línea separados por comas cuando deberían ser una lista.
 
-Si la información no está en el manual: "La información solicitada no está presente en el documento proporcionado."`;
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REGLA N°4 — FIGURAS E IMÁGENES (OBLIGATORIO)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Las figuras son parte INTEGRAL de la respuesta técnica. Si el contenido del manual que usas para responder menciona o hace referencia a una figura, DEBES citarla — no es opcional.
+
+OBLIGATORIO: Si al leer los fragmentos del contexto encuentras referencias a figuras (Figura X, Fig. X, ver figura X, etc.) relacionadas con la pregunta, inclúyelas en tu respuesta citándolas en el lugar pertinente.
+
+Formato de cita: (Figura X) o (Figuras X y Y) — siempre con paréntesis y número exacto del manual.
+Cita la figura DENTRO de la oración donde es pertinente:
+  Correcto: "El procedimiento de izaje se ilustra en (Figura 8)."
+  Incorrecto: omitir la figura porque "no la preguntaron explícitamente".
+
+NUNCA uses [IMAGEN: ...], [VER IMAGEN: ...] ni ningún otro formato. Solo (Figura X).
+
+Al final del contexto encontrarás una sección "FIGURAS DISPONIBLES" — lista de figuras relevantes ya identificadas con su número exacto. DEBES citar todas las que sean pertinentes a tu respuesta usando (Figura X) en la oración donde correspondan. Si una figura del catálogo es relevante a lo que explicas, cítala. No cites figuras que no sean pertinentes a la pregunta.
+
+CRÍTICO — NUNCA adivines ni inventes un número de figura:
+- Solo cita (Figura X) si el número aparece EXPLÍCITAMENTE en el texto del fragmento O en la sección "FIGURAS DISPONIBLES" del contexto.
+- PROHIBIDO escribir expresiones como "Figura en la página X", "el diagrama de la página X", "ver imagen en pág. X". Si no tienes el número, omite la cita completamente.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REGLA N°5 — FIDELIDAD TÉCNICA Y CUÁNDO RESPONDER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Copia los datos técnicos EXACTAMENTE como aparecen en el manual. "200 Kg/cm2 (20 MPa)" se escribe exactamente así.
+- NUNCA inventes datos, valores o procedimientos que no estén en el manual.
+- Incluye advertencias de ATENCIÓN, PRECAUCIÓN o PELIGRO cuando sean directamente relevantes a la pregunta.
+
+CUÁNDO DECIR "NO ESTÁ EN EL DOCUMENTO" — LEE ESTO CON ATENCIÓN:
+Solo dices "La información solicitada no está presente en este documento." si NINGUNO de los fragmentos del contexto contiene absolutamente nada relacionado con la pregunta.
+Si CUALQUIER fragmento tiene información parcial o relacionada con lo preguntado, DEBES responder con esa información.
+Está PROHIBIDO decir "no está presente" si el contexto contiene datos relevantes. Cuando tengas duda, responde con lo que encuentres — una respuesta parcial es SIEMPRE mejor que negarse a responder.
+
+CASO ESPECIAL CRÍTICO — "características generales": Si el usuario pregunta por "características generales" o "características del equipo" y el contexto contiene CUALQUIER dato del equipo (marca, modelo, tipo, dimensiones, pesos, presiones, aplicaciones), DEBES responderlos todos. Las "características generales" son exactamente eso — toda la información disponible sobre el equipo. NUNCA digas "no está presente" cuando el contexto tiene datos técnicos del equipo.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REGLA N°6 — ESTILO Y TONO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Tono profesional, cálido y elocuente. Como un ingeniero senior explicando a un cliente importante.
+- Puedes comenzar con UNA frase introductoria breve y natural que identifique el equipo o el tema (máximo 15 palabras). Por ejemplo: "A continuación encontrarás las especificaciones técnicas de la punzonadora MX-340G:" o "El procedimiento de transporte de esta máquina se describe en los siguientes pasos:". Solo una frase — luego entra directamente al contenido.
+- Usa frases completas y naturales. La respuesta debe fluir como una explicación técnica de calidad, no como una lista de datos copiada.
+- PROHIBIDO usar frases genéricas como "Con mucho gusto", "Claro que sí", "Espero que esto te ayude" o cualquier fórmula de cortesía vacía.
+- Sé conciso: incluye todo lo necesario, nada de lo innecesario.`;
+
 
 interface ChatRequest {
   message: string;
@@ -127,13 +172,13 @@ serve(async (req) => {
     const questionEmbedding = await generateEmbedding(normalizedMessage, openaiApiKey);
     console.log(`Embedding generated: ${questionEmbedding.length} dimensions, first 3: [${questionEmbedding.slice(0, 3).join(', ')}]`);
 
-    // 2. Search for relevant document chunks - balanced threshold for quality
+    // 2. Search for relevant document chunks - fetch more to cover multi-section topics
     let searchUserId = user_id;
     const { data: relevantChunks, error: chunksError } = await supabase.rpc(
       "match_documents",
       {
         query_embedding: questionEmbedding,
-        match_threshold: 0.12,
+        match_threshold: 0.18,
         match_count: 15,
         p_user_id: user_id,
       }
@@ -161,13 +206,66 @@ serve(async (req) => {
           "match_documents",
           {
             query_embedding: questionEmbedding,
-            match_threshold: 0.12,
+            match_threshold: 0.18,
             match_count: 15,
             p_user_id: searchUserId,
           }
         );
         finalChunks = fallbackChunks;
         console.log(`Fallback chunks found: ${finalChunks?.length ?? 0}`);
+      }
+    }
+
+    // Filter out table-of-contents chunks (lines with "..." or page number references)
+    // and chunks with very low similarity to reduce noise for GPT
+    if (finalChunks && finalChunks.length > 0) {
+      const topSimilarity = finalChunks[0].similarity;
+      const minSimilarity = Math.max(topSimilarity * 0.50, 0.20);
+      finalChunks = finalChunks.filter((c: RelevantChunk) => {
+        // Remove chunks that are mostly table of contents
+        const dotLines = (c.content || '').split('\n').filter((l: string) => l.includes('..........'));
+        const totalLines = (c.content || '').split('\n').filter((l: string) => l.trim().length > 0);
+        const isTOC = dotLines.length > totalLines.length * 0.5;
+        if (isTOC) {
+          console.log(`Filtered TOC chunk (page ${c.page_number}, sim ${c.similarity})`);
+          return false;
+        }
+        // Remove chunks too far from the best match
+        if (c.similarity < minSimilarity) {
+          console.log(`Filtered low-sim chunk (page ${c.page_number}, sim ${c.similarity} < ${minSimilarity})`);
+          return false;
+        }
+        return true;
+      });
+      console.log(`After filtering: ${finalChunks.length} chunks (min sim: ${minSimilarity.toFixed(3)})`);
+    }
+
+    // 2b. Supplementary search: for "características" queries, always fetch chunks for
+    // "características generales especificaciones técnicas" to guarantee section 1.4 is included.
+    // This fixes the split-section problem where section 1 and section 1.4 have different embeddings.
+    const isCaracteristicasQuery = /caracter[ií]stic/i.test(normalizedMessage);
+    if (isCaracteristicasQuery && searchUserId) {
+      try {
+        const suppEmbedding = await generateEmbedding(
+          'características generales especificaciones técnicas potencia tensión presión peso',
+          openaiApiKey
+        );
+        const { data: suppChunks } = await supabase.rpc('match_documents', {
+          query_embedding: suppEmbedding,
+          match_threshold: 0.18,
+          match_count: 8,
+          p_user_id: searchUserId,
+        });
+        if (suppChunks && suppChunks.length > 0) {
+          const existingIds = new Set((finalChunks || []).map((c: RelevantChunk) => c.id));
+          const newChunks = suppChunks.filter((c: RelevantChunk) => !existingIds.has(c.id));
+          if (newChunks.length > 0) {
+            finalChunks = [...(finalChunks || []), ...newChunks];
+            console.log(`Supplementary características search added ${newChunks.length} chunks`);
+          }
+        }
+      } catch {
+        console.log('Supplementary search skipped');
       }
     }
 
@@ -194,16 +292,65 @@ serve(async (req) => {
     const chunkCount = finalChunks?.length || 0;
     const imageCount = relevantImages?.length || 0;
     console.log(`Found ${chunkCount} chunks, ${imageCount} images`);
+    console.log(`searchUserId=${searchUserId}, original user_id=${user_id}, normalizedMessage=${normalizedMessage}`);
+
+    // DEBUG: Log first chunk content to verify we got the right data
+    if (finalChunks && finalChunks.length > 0) {
+      console.log(`First chunk (page ${finalChunks[0].page_number}, sim ${finalChunks[0].similarity}): ${finalChunks[0].content?.substring(0, 100)}`);
+    }
 
     // 4. Build context from retrieved data
     const chunksContext = buildChunksContext(finalChunks || []);
 
-    // Images context is NOT sent to GPT - it was causing "DIAGRAMAS DISPONIBLES" to appear in responses
-    // Images are matched post-response by insertInlineImages() using figure references
-    const imagesContext = '';
+    // Build a figure catalog from vector-retrieved images so GPT knows exactly which figures
+    // are available and can cite them by number — enabling inline image insertion for ALL topics.
+    let figureCatalog = '';
+    if (relevantImages.length > 0) {
+      const catalogEntries: string[] = [];
+      const seenFigNums = new Set<string>();
+
+      for (const img of relevantImages.filter(i => i.similarity >= 0.35).slice(0, 6)) {
+        const combined = (img.image_url || '') + ' ' + (img.context || '');
+
+        // Extract figure number(s) — support "Figura 6 y 7", "Figura-4", etc.
+        const figNumMatch = combined.match(/figura[- ]?(\d+)(?:\s*y\s*(\d+))?/i);
+        if (!figNumMatch) continue;
+
+        const figKey = figNumMatch[2]
+          ? `${figNumMatch[1]}-${figNumMatch[2]}`
+          : figNumMatch[1];
+        if (seenFigNums.has(figKey)) continue;
+        seenFigNums.add(figKey);
+
+        // Extract a brief description from context
+        let desc = '';
+        const afterFigMatch = (img.context || '').match(/figura[- ]?\d+(?:\s*y\s*\d+)?[.\s:]+(.+?)(?:\n|$)/i);
+        if (afterFigMatch && afterFigMatch[1] && afterFigMatch[1].trim().length > 4) {
+          desc = afterFigMatch[1].slice(0, 90).trim();
+        } else {
+          const firstMeaningfulLine = (img.context || '')
+            .split('\n')
+            .find(l => l.trim().length > 8 && !/^figura/i.test(l.trim()));
+          if (firstMeaningfulLine) desc = firstMeaningfulLine.slice(0, 90).trim();
+        }
+        if (!desc) desc = `página ${img.page_number}`;
+
+        const figLabel = figNumMatch[2]
+          ? `Figuras ${figNumMatch[1]} y ${figNumMatch[2]}`
+          : `Figura ${figNumMatch[1]}`;
+
+        catalogEntries.push(`  - (${figLabel}): ${desc}`);
+      }
+
+      if (catalogEntries.length > 0) {
+        figureCatalog = `\n\nFIGURAS DISPONIBLES:\n${catalogEntries.join('\n')}\nCita las pertinentes con (Figura X) en la oración exacta donde correspondan.`;
+        console.log(`Figure catalog built: ${catalogEntries.length} entries`);
+        console.log(figureCatalog);
+      }
+    }
 
     // Check if we have ANY context
-    if (!chunksContext && !imagesContext) {
+    if (!chunksContext) {
       return new Response(
         JSON.stringify({
           steps: ["No se encontró información relevante en el documento para responder tu pregunta. Asegúrate de haber subido un documento PDF y de que tu pregunta esté relacionada con su contenido."],
@@ -214,7 +361,7 @@ serve(async (req) => {
       );
     }
 
-    const fullContext = `INFORMACIÓN DEL DOCUMENTO:\n${chunksContext}${imagesContext}`;
+    const fullContext = `INFORMACIÓN DEL DOCUMENTO:\n${chunksContext}${figureCatalog}`;
 
     console.log(`Context length: ${fullContext.length} chars`);
 
@@ -229,10 +376,11 @@ serve(async (req) => {
         model: "gpt-4o",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: `MANUAL TÉCNICO (contenido extraído entre « y »):\n\n${fullContext}\n\n---\n\nPREGUNTA: ${message}\n\nINSTRUCCIONES:\n1. Responde SOLO con información del manual. Selecciona los fragmentos relevantes a la pregunta.\n2. NO copies líneas de índice/tabla de contenidos.\n3. Incluye tablas técnicas COMPLETAS con todos sus valores.\n4. Refiere las Figuras con formato (Figura X). NUNCA uses [IMAGEN: ...].\n5. Si hay advertencias de seguridad relevantes, inclúyelas.\n6. Si el usuario tiene errores ortográficos, interpreta su intención y responde. Si los errores son notables, incluye una nota breve al inicio corrigiendo la pregunta.\n7. Preguntas generales (ej: "características", "mantenimiento") se refieren al equipo/máquina documentada. Responde con TODA la información disponible sobre ese tema.` }
+          { role: "user", content: `MANUAL TÉCNICO (contenido extraído entre « y »):\n\n${fullContext}\n\n---\n\nPREGUNTA DEL USUARIO: ${message}\n\nINSTRUCCIONES PARA ESTA RESPUESTA:\n1. Identifica con precisión qué está preguntando el usuario.\n2. LEE TODOS los fragmentos del contexto. De cada fragmento, extrae SOLO las partes que responden directamente la pregunta. No descartes fragmentos enteros — pueden contener mezcla de temas y debes quedarte solo con lo relevante.\n3. Si la pregunta es sobre "características" o "especificaciones": incluye en tu respuesta solo datos técnicos del equipo (potencia, dimensiones, capacidades, materiales, pesos, presiones, etc.). Omite de tu respuesta cualquier información sobre tipos de piezas, mantenimiento o instalación, aunque aparezca en los fragmentos.\n4. NO copies líneas de índice ni tabla de contenidos (líneas con "......." o solo números).\n5. OBLIGATORIO: si los fragmentos del contexto mencionan figuras relacionadas con la pregunta, cítalas con (Figura X) en la oración donde correspondan. Las figuras son parte de la respuesta técnica, no un extra opcional.\n6. Usa el formato etiqueta: valor para datos técnicos. NUNCA uses | col | val | (tablas Markdown).\n7. Incluye advertencias de seguridad solo si son directamente relevantes a lo preguntado.\n8. Interpreta errores ortográficos del usuario y responde directamente, sin mencionar la interpretación. Solo pregunta "¿Quisiste decir...?" si la pregunta es genuinamente incomprensible.\n9. Si encuentras CUALQUIER información relevante en los fragmentos, RESPÓNDELA. Solo di "no está presente" si absolutamente ningún fragmento tiene relación con la pregunta.` }
         ],
-        temperature: 0,
+        temperature: 0.1,
         max_tokens: 4096,
+        seed: 42,
       }),
     });
 
@@ -318,7 +466,7 @@ serve(async (req) => {
     }
 
     // 6. Insert images INLINE in the response text where figures are referenced
-    const { enrichedResponse, usedImages } = insertInlineImages(rawResponse, relevantImages, finalChunks || []);
+    const { enrichedResponse, usedImages } = insertInlineImages(rawResponse, relevantImages, finalChunks || [], normalizedMessage);
 
     // 7. Parse the enriched response into steps
     const steps = parseSteps(enrichedResponse);
@@ -431,7 +579,8 @@ function parseSteps(response: string): string[] {
 function insertInlineImages(
   text: string,
   availableImages: RelevantImage[],
-  chunks: RelevantChunk[]
+  chunks: RelevantChunk[],
+  userQuestion: string = ''
 ): { enrichedResponse: string; usedImages: Array<{ url: string; caption: string; page_number: number }> } {
   const usedImages: Array<{ url: string; caption: string; page_number: number }> = [];
   const usedImageIds = new Set<number>(); // Track by image ID, not page (different figures can share a page)
@@ -587,11 +736,20 @@ function insertInlineImages(
         page_number: bestMatch.page_number,
       });
 
-      const endOfLine = text.indexOf('\n', match.index);
-      const insertPos = endOfLine !== -1 ? endOfLine : match.index + match[0].length;
+      // Insert the image IMMEDIATELY after the figure reference text
+      // (not at the end of the full line, which could be far away)
+      // Find end of current sentence (period, newline, or end of figure marker)
+      const afterRef = match.index + match[0].length;
+      // Look for end of sentence near the reference: period, exclamation, newline — within 120 chars
+      const textAfterRef = text.slice(afterRef, afterRef + 120);
+      const sentenceEnd = textAfterRef.search(/[.\n!]/);
+      const insertPos = sentenceEnd !== -1
+        ? afterRef + sentenceEnd + 1  // right after the sentence-ending punctuation
+        : afterRef;                    // fallback: right after the figure reference
+
       insertions.push({
         position: insertPos,
-        imageTag: `\n[IMG:${bestMatch.image_url}|${caption}]`,
+        imageTag: `\n[IMG:${bestMatch.image_url}|${caption}]\n`,
       });
 
       console.log(`Matched: ${caption} -> image ${bestMatch.id} (page ${bestMatch.page_number})`);
@@ -604,7 +762,38 @@ function insertInlineImages(
     enriched = enriched.slice(0, ins.position) + ins.imageTag + enriched.slice(ins.position);
   }
 
-  // Cap at 4 images
+
+  // CLEAN FALLBACK: When GPT cited zero figures, inject figures from pages of high-confidence answer chunks.
+  // This handles figures whose PDF caption has no inline text reference (Figura 4 transporte, Figura 1 dimensiones).
+  // Page-proximity from high-confidence chunks is cleaner than stem matching:
+  // we know exactly which pages contain the answer text, so figures on those pages are relevant.
+  if (usedImages.length === 0 && chunks.length > 0) {
+    // Collect pages from high-confidence answer chunks (up to top 5)
+    const answerPages = new Set(
+      chunks.filter(c => c.similarity >= 0.38).slice(0, 5).map(c => c.page_number)
+    );
+
+    if (answerPages.size > 0) {
+      // Among images on those pages, pick the most vector-similar ones (max 2)
+      const candidates = availableImages
+        .filter(img => !usedImageIds.has(img.id) && answerPages.has(img.page_number))
+        .sort((a, b) => b.similarity - a.similarity)
+        .slice(0, 2);
+
+      for (const img of candidates) {
+        const figNumMatch = (img.image_url + ' ' + (img.context || '')).match(/figura[- ]?(\d+)/i);
+        if (!figNumMatch) continue; // Only inject named figures
+
+        const caption = `Figura ${figNumMatch[1]}`;
+        usedImageIds.add(img.id);
+        usedImages.push({ url: img.image_url, caption, page_number: img.page_number });
+        enriched += `\n[IMG:${img.image_url}|${caption}]\n`;
+        console.log(`Page-based fallback: ${caption} (page ${img.page_number}, sim: ${img.similarity.toFixed(3)})`);
+      }
+    }
+  }
+
+  // Cap at 4 images total
   if (usedImages.length > 4) {
     usedImages.length = 4;
   }
@@ -613,14 +802,8 @@ function insertInlineImages(
 }
 
 async function normalizeQuery(query: string, apiKey: string): Promise<string> {
-  // Quick check: if query looks clean (only common chars, proper Spanish), skip normalization
-  const hasObviousIssues = /[a-záéíóúñü]{2,}(mm|nn|ss|tt|ll(?!a|e|o)|rr(?!a|e|i|o))|[bcdfghjklmpqrstvwxyz]{4,}/i.test(query)
-    || /\b(con|las|los|del|der|dek)\b/i.test(query) && query.length < 80;
-
-  if (!hasObviousIssues && query.length < 200) {
-    return query;
-  }
-
+  // Always normalize: typos like "caracteristifas" look clean to regex but break embeddings.
+  // gpt-4o-mini cost is negligible vs wrong search results.
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",

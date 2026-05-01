@@ -10,10 +10,10 @@ interface EngagementDonutProps {
 }
 
 const SEGMENTS = [
-  { key: 'power', label: 'Power Users', range: '10+ msgs', color: '#F97316', minMessages: 10 },
-  { key: 'regular', label: 'Regulares', range: '3-9 msgs', color: '#FB923C', minMessages: 3 },
-  { key: 'light', label: 'Ligeros', range: '1-2 msgs', color: '#FDBA74', minMessages: 1 },
-  { key: 'inactive', label: 'Inactivos', range: '0 msgs', color: '#475569', minMessages: 0 },
+  { key: 'power', label: 'Usuarios Avanzados', range: '10+ mensajes', color: '#F97316', minMessages: 10 },
+  { key: 'regular', label: 'Regulares', range: '3-9 mensajes', color: '#FB923C', minMessages: 3 },
+  { key: 'light', label: 'Ligeros', range: '1-2 mensajes', color: '#FDBA74', minMessages: 1 },
+  { key: 'inactive', label: 'Inactivos', range: '0 mensajes', color: '#475569', minMessages: 0 },
 ];
 
 function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { name: string; value: number; range: string } }> }) {

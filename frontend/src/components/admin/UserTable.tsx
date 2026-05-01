@@ -180,7 +180,7 @@ export function UserTable({ users }: UserTableProps) {
                 onClick={() => toggleSort('login_count')}
               >
                 <div className="flex items-center gap-1.5">
-                  Logins <SortIcon columnKey="login_count" />
+                  Sesiones <SortIcon columnKey="login_count" />
                 </div>
               </th>
               <th
